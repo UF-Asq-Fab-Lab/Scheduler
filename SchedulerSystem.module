@@ -1,0 +1,79 @@
+<?php
+
+	class SchedulerSystem extends Process implements Module, ConfigurableModule {
+		public static function getModuleInfo() {
+            return array(
+                'title' => 'A² Fab Lab Scheduler System',
+                'summary' => 'Makes an admin page to manage the scheduler. Provides a frontend interface for users to schedule events, reserve machinery.',
+                'version' => 1,
+                'autoload' => true 
+            );
+
+            public function __construct() {
+
+            }
+
+            public function init() {
+            	if(isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], $this->scheduler_page_url) !== false) {
+               		$this->addHookAfter('TemplateFile::render', $this, 'addUploadHandler');
+                	$this->addHook('ProcessPageView::execute', $this, 'addUploadForm');
+            	}
+
+           		$this->changeCronJobMailTo($this->email);
+            }
+
+            public static function getDefaultConfig() {
+            	$rootpath = wire('config')->paths->root;
+            	/*
+            		Organization: manager page in admin/modules, two pagetables.
+					One pagetable holds event data (start, end, machine, user)
+					Other holds machine data (name, status, status info)
+				*/
+            	return array (
+            			"scheduler_handler_filepath" => $rootpath . "/site/templates/includes/scheduler-handler.php",
+            			"scheduler_calendar_filepath" => $rootpath . "/site/templates/includes/scheduler-calendar.js",
+            			"email" => "managerEmail@managerHost.com",
+            			"scheduler_page_url" => "/path/to/scheduler",
+            			"scheduler_page_id" => null,
+            			"scheduler_templ_id" => null,
+            			"scheduler_fldgrp_id" => null,
+            			"scheduler_eventsTable_id" => null,
+            			"scheduler_eventsTable_templ_id" => null,
+            			"scheduler_eventsTable_fldgrp_id" => null,
+            			"scheduler_eventsTableFields_ids" => "",
+            			"scheduler_eventsTable_name" => "scheduler_events",
+            			"scheduler_eventsTable_cols" => "start_Datetime end_Datetime"
+            		)
+        	}
+
+        	public function changeCronJobMailTo($addr){
+	            $rootpath = wire('config')->paths->root;
+	            $crontabfile = $rootpath . "cron/crontab.txt";
+	            $newLine = "MAILTO=".$addr;
+	            $crontabLines = file($crontabfile);
+	            $oldLine = trim($crontabLines[0]);
+	            if(strcmp($newLine, $oldLine) != 0){
+	                $crontabLines[0] = $newLine."\n";
+	                $updated = implode($crontabLines, '');
+	                file_put_contents($crontabfile, $updated);
+	                exec("crontab ".$rootpath."cron/crontab.txt");
+	            }
+	        }
+
+            public function __install() {
+
+            }
+
+            public function __uninstall() {
+
+            }
+
+            public static function getModuleConfigInputfields(array $data) {
+            	$inputfields = new InputfieldWrapper();
+
+            	return $inputfields;
+            }
+        } 
+	}
+
+?>
