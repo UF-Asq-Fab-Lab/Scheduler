@@ -8,72 +8,420 @@
                 'version' => 1,
                 'autoload' => true 
             );
+        }
 
-            public function __construct() {
+        public function __construct() {
 
-            }
+        }
 
-            public function init() {
-            	if(isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], $this->scheduler_page_url) !== false) {
-               		$this->addHookAfter('TemplateFile::render', $this, 'addUploadHandler');
-                	$this->addHook('ProcessPageView::execute', $this, 'addUploadForm');
-            	}
-
-           		$this->changeCronJobMailTo($this->email);
-            }
-
-            public static function getDefaultConfig() {
-            	$rootpath = wire('config')->paths->root;
-            	/*
-            		Organization: manager page in admin/modules, two pagetables.
-					One pagetable holds event data (start, end, machine, user)
-					Other holds machine data (name, status, status info)
-				*/
-            	return array (
-            			"scheduler_handler_filepath" => $rootpath . "/site/templates/includes/scheduler-handler.php",
-            			"scheduler_calendar_filepath" => $rootpath . "/site/templates/includes/scheduler-calendar.js",
-            			"email" => "managerEmail@managerHost.com",
-            			"scheduler_page_url" => "/path/to/scheduler",
-            			"scheduler_page_id" => null,
-            			"scheduler_templ_id" => null,
-            			"scheduler_fldgrp_id" => null,
-            			"scheduler_eventsTable_id" => null,
-            			"scheduler_eventsTable_templ_id" => null,
-            			"scheduler_eventsTable_fldgrp_id" => null,
-            			"scheduler_eventsTableFields_ids" => "",
-            			"scheduler_eventsTable_name" => "scheduler_events",
-            			"scheduler_eventsTable_cols" => "start_Datetime end_Datetime"
-            		)
+        public function init() {
+        	if(isset($_SERVER['REQUEST_URI']) && strpos($_SERVER['REQUEST_URI'], $this->scheduler_page_url) !== false) {
+           		$this->addHookAfter('TemplateFile::render', $this, 'addScheduleHandler');
+            	$this->addHook('ProcessPageView::execute', $this, 'addCalendar');
         	}
 
-        	public function changeCronJobMailTo($addr){
-	            $rootpath = wire('config')->paths->root;
-	            $crontabfile = $rootpath . "cron/crontab.txt";
-	            $newLine = "MAILTO=".$addr;
-	            $crontabLines = file($crontabfile);
-	            $oldLine = trim($crontabLines[0]);
-	            if(strcmp($newLine, $oldLine) != 0){
-	                $crontabLines[0] = $newLine."\n";
-	                $updated = implode($crontabLines, '');
-	                file_put_contents($crontabfile, $updated);
-	                exec("crontab ".$rootpath."cron/crontab.txt");
-	            }
-	        }
+       		$this->changeCronJobMailTo($this->email);
+        }
 
-            public function __install() {
+        public static function getDefaultConfig() {
+        	$rootpath = wire('config')->paths->root;
+        	/*
+        		Organization: manager page in admin/modules, two pagetables.
+				One pagetable holds event data (start, end, machine, user)
+				Other holds machine data (name, status, status info)
+			*/
+        	return array (
+        			"scheduler_handler_filepath" => $rootpath . "/site/templates/includes/scheduler-handler.php",
+        			"scheduler_calendar_filepath" => $rootpath . "/site/templates/includes/scheduler-calendar.js",
+        			"email" => "managerEmail@managerHost.com",
 
+        			"scheduler_page_url" => "/path/to/scheduler",
+        			"scheduler_page_id" => null,
+        			"scheduler_templ_id" => null,
+        			"scheduler_fldgrp_id" => null,
+
+        			"scheduler_eventsTable_id" => null,
+        			"scheduler_eventsTable_templ_id" => null,
+        			"scheduler_eventsTable_fldgrp_id" => null,
+                    "scheduler_eventsTableFields_ids" => "",
+
+                    "scheduler_equipmentTable_id" => null,
+                    "scheduler_equipmentTable_templ_id" => null,
+                    "scheduler_equipmentTable_fldgrp_id" => null,
+                    "scheduler_equipmentTableFields_ids" => "",
+
+                    "scheduler_page_name" => "scheduler_management",
+                    "scheduler_page_title" => "Scheduler Management",
+
+        			
+        			"scheduler_eventsTable_name" => "scheduler_events",
+        			"scheduler_eventsTable_cols" => "start_Datetime end_Datetime equipmentName_Text username_Text email_Email",
+                    "scheduler_eventsTable_label" => "Scheduler Events Table",
+
+                    "scheduler_equipmentTable_name" => "scheduler_equipment",
+                    "scheduler_equipmentTable_cols" => "name_Text description_Textarea available_Checkbox",
+                    "scheduler_equipmentTable_label" => "Scheduler Equipment Table",
+                    "scheduler_tags" => "scheduler"
+        		)
+    	}
+
+    	public function changeCronJobMailTo($addr){
+            $rootpath = wire('config')->paths->root;
+            $crontabfile = $rootpath . "cron/crontab.txt";
+            $newLine = "MAILTO=".$addr;
+            $crontabLines = file($crontabfile);
+            $oldLine = trim($crontabLines[0]);
+            if(strcmp($newLine, $oldLine) != 0){
+                $crontabLines[0] = $newLine."\n";
+                $updated = implode($crontabLines, '');
+                file_put_contents($crontabfile, $updated);
+                exec("crontab ".$rootpath."cron/crontab.txt");
+            }
+        }
+
+        public function initCronjob($rootpath){
+            $crontabfile = $rootpath . "cron/crontab.txt";
+            $crontabtxt = "";
+            $this->message($crontabfile);
+            $this->message(file_exists($crontabfile));
+            if(!file_exists($crontabfile)){
+                $crontabtxt .= "MAILTO=".$defaults['email']."\n";
+                $crontabtxt .= "*/2 * * * * ". $rootpath."cron/clean_events.php > " . $rootpath . "cron/clean_events_logs"."\n";
+                $this->message($crontabtxt);
+                if(file_put_contents($crontabfile, $crontabtxt)){
+                    $this->message("wrote file");
+                } else {
+                    $e = error_get_last();
+                    $this->message("Error: " . $e['message']);
+                }
+                
+            } else {
+                $this->message("crontab.txt exists");
+                $cronContent = file($crontabfile);
+                $preset = false;
+                foreach($cronContent as $line){
+                    if(preg_match('/clean_events\.php/', $line)){
+                        $this->message("events cleaning task already set");
+                        $preset = true;
+                    }
+                }
+                if(!$preset){
+                    $this->message("uploads task not set, setting...");
+                    array_push($cronContent, "*/2 * * * * ". $rootpath."cron/clean_events.php > " . $rootpath . "cron/clean_events_logs\n");
+                    file_put_contents($crontabfile, $cronContent);
+                }
+            }
+            $this->message("Launch cronjob: " . $rootpath."cron/crontab.txt");
+            exec("crontab ".$rootpath."cron/crontab.txt");
+        }
+
+        public function removeCronjob($rootpath){
+            $crontabfile = $rootpath . "cron/crontab.txt";
+
+            $crontabtxt = file_get_contents($crontabfile);
+            $removed = str_replace("*/2 * * * * ". $rootpath."cron/clean_uploads.php > " . $rootpath . "cron/clean_uploads_logs"."\n", '', $crontabtxt);
+            $this->message($removed);
+            file_put_contents($crontabfile, $removed);
+        }
+
+        public function __install() {
+            $defaults = self::getDefaultConfig();
+            $rootpath = wire('config')->paths->root;
+            $this->initCronjob($rootpath);
+            $eventsModulePage = $this->getInstallPage(false, $defaults);
+            $this->message("Installed to {$eventsModulePage->path}.");
+        }
+
+        public function __uninstall() {
+            $defaults = self::getDefaultConfig();
+            $data = wire('modules')->getModuleConfigData($this->className());
+            $data = array_merge($defaults, $data);
+            $rootpath = wire('config')->paths->root;
+            $this->removeCronjob($rootpath);
+            $page = $this->pages->get("name={$data['scheduler_page_name']}");
+            $pageTemplate = $this->templates->get("name={$data['scheduler_page_name']}_T");
+            $pageFieldgroup = $this->fieldgroups->get("name={$data['scheduler_page_name']}_FG");
+
+            $eventsTable = $this->fields->get("name={$data['scheduler_eventsTable_name']}");
+            $eventsTableTemplate = $this->templates->get("name={$data['scheduler_eventsTable_name']}_T");
+            $eventsTableFieldgroup = $this->fieldgroups->get("name={$data['scheduler_eventsTable_name']}_FG");
+
+            $equipmentTable = $this->fields->get("name={$data['scheduler_equipmentTable_name']}");
+            $equipmentTableTemplate = $this->templates->get("name={$data['scheduler_equipmentTable_name']}_T");
+            $equipmentTableFieldgroup = $this->fieldgroups->get("name={$data['scheduler_equipmentTable_name']}_FG");
+
+            //TO DO: Break this into two functions: removeModulePage, removePageTable
+
+            //REMOVE PAGE AND CHILDREN
+            if($page->id) {
+                if(count($page->children)){
+                    foreach ($page->children as $child) {
+                        $this->message("Removed page table entry {$child->path}");
+                        $this->pages->delete($child); 
+                    }
+                } 
+                $this->message("Removed {$page->path}");
+                $this->pages->delete($page, true); 
             }
 
-            public function __uninstall() {
-
+            //REMOVE PAGE TEMPLATE AND FIELDGROUP
+            if($pageTemplate->id){
+                $pageTemplate->flags = Template::flagSystemOverride;
+                $pageTemplate->flags = 0;
+                $pageTemplate->save();
+                if ($pageTemplate->getNumPages() > 0) {
+                    throw new WireException("Can't uninstall because template is used by some pages.");
+                } else {
+                    $this->message("Remove: page template: {$pageTemplate->name}");
+                    $this->templates->delete($pageTemplate);
+                }
             }
 
-            public static function getModuleConfigInputfields(array $data) {
-            	$inputfields = new InputfieldWrapper();
-
-            	return $inputfields;
+            if($pageFieldgroup->id){
+                $this->message("Remove: page template fieldgroup: {$pageFieldgroup->name}");
+                $this->fieldgroups->delete($pageFieldgroup);
             }
-        } 
-	}
+
+            //REMOVE CHILD TEMPLATE (PAGE TABLE ENTRY TEMPLATE AND FIELDGROUP)
+            if($eventsTableTemplate->id){
+                $eventsTableTemplate->flags = Template::flagSystemOverride;
+                $eventsTableTemplate->flags = 0;
+                $eventsTableTemplate->save();
+                if($eventsTableTemplate->getNumPages() > 0){
+                    throw new WireException("Can't uninstall because template is used by some pages.");
+                } else {
+                    $this->message("Remove: pagetable template: {$eventsTableTemplate->name}");
+                    $this->templates->delete($eventsTableTemplate);
+                }
+            }
+
+            if($eventsTableFieldgroup->id){
+                $this->message("Remove: pagetable template fieldgroup: {$eventsTableFieldgroup->name}");
+                $this->fieldgroups->delete($eventsTableFieldgroup);  
+            }
+
+            //REMOVE PAGETABLE FIELD
+            if($eventsTable->id){
+                $this->message("Remove: pagetable: {$eventsTable->name}");
+                $this->fields->delete($eventsTable);
+            }
+
+            //REMOVE PAGETABLE ENTRY FIELDS
+            $fieldsArray = explode(' ', $data['scheduler_eventsTable_cols']);
+            foreach ($fieldsArray as $field) {
+                 $fieldShortname = substr($field, 0, strpos($field, "_"));
+                if($this->fields->get("name=$fieldShortname")){
+                    if($this->fields->get("name=$fieldShortname")->numFieldgroups() == 0){
+                        $this->message("Remove: pagetable field: {$field->name}");
+                        $this->fields->delete($this->fields->get("name={$fieldShortname}"));
+                    }
+                }
+            }
+
+            //REMOVE CHILD TEMPLATE (PAGE TABLE ENTRY TEMPLATE AND FIELDGROUP)
+            if($equipmentTableTemplate->id){
+                $equipmentTableTemplate->flags = Template::flagSystemOverride;
+                $equipmentTableTemplate->flags = 0;
+                $equipmentTableTemplate->save();
+                if($equipmentTableTemplate->getNumPages() > 0){
+                    throw new WireException("Can't uninstall because template is used by some pages.");
+                } else {
+                    $this->message("Remove: pagetable template: {$equipmentTableTemplate->name}");
+                    $this->templates->delete($equipmentTableTemplate);
+                }
+            }
+
+            if($equipmentTableFieldgroup->id){
+                $this->message("Remove: pagetable template fieldgroup: {$equipmentTableFieldgroup->name}");
+                $this->fieldgroups->delete($equipmentTableFieldgroup);  
+            }
+
+            //REMOVE PAGETABLE FIELD
+            if($equipmentTable->id){
+                $this->message("Remove: pagetable: {$equipmentTable->name}");
+                $this->fields->delete($equipmentTable);
+            }
+
+            //REMOVE PAGETABLE ENTRY FIELDS
+            $fieldsArray = explode(' ', $data['scheduler_equipmentTable_cols']);
+            foreach ($fieldsArray as $field) {
+                 $fieldShortname = substr($field, 0, strpos($field, "_"));
+                if($this->fields->get("name=$fieldShortname")){
+                    if($this->fields->get("name=$fieldShortname")->numFieldgroups() == 0){
+                        $this->message("Remove: pagetable field: {$field->name}");
+                        $this->fields->delete($this->fields->get("name={$fieldShortname}"));
+                    }
+                }
+            }
+        }
+
+        protected function getInstalledPage($uninstall, $defaults) {
+
+        $data = wire('modules')->getModuleConfigData($this->className());
+        $data = array_merge($defaults, $data);
+
+        $parent = $this->pages->get("name=module,parent=".$this->config->adminRootPageID); 
+        $page = $parent->child("name={$data['scheduler_page_name']}"); 
+
+        if(!$page->id && !$uninstall) {    
+            $page = new Page();
+            $page->parent = $parent; 
+
+
+            $eventsTable = $this->fields->get("name={$data['scheduler_eventsTable_name']}");
+            if(!$eventsTable->id){
+                $eventsTable = $this->getPageTable(array($defaults['scheduler_eventsTable_name'],
+                $defaults['scheduler_eventsTable_cols'],
+                $defaults['scheduler_eventsTable_label'],
+                $defaults['scheduler_tags'],
+                $page->id));
+            }
+
+            $equipmentTable = $this->fields->get("name={$data['scheduler_equipmentTable_name']}");
+            if(!$equipmentTable->id){
+                $equipmentTable = $this->getPageTable(array($defaults['scheduler_equipmentTable_name'],
+                $defaults['scheduler_equipmentTable_cols'],
+                $defaults['scheduler_equipmentTable_label'],
+                $defaults['scheduler_tags'],
+                $page->id));
+            }
+
+            $pageFG = $this->fieldgroups->get("name={$data['scheduler_page_name']}_FG");
+            if(!$pageFG->id){
+                $pageFG = new Fieldgroup();
+                $pageFG->name = "{$data['scheduler_page_name']}_FG";
+                $pageFG->append($this->fields->get("name=title"));
+                $pageFG->append($this->fields->get("name=process"));
+                $pageFG->append($eventsTable);
+                $pageFG->append($equipmentTable);
+                $pageFG->save(); 
+            }
+            
+            $pageTemplate = $this->templates->get("name={$data['scheduler_page_name']}_T");
+            if(!$pageTemplate->id){
+               $pageTemplate = new Template();
+                $this->message("mgmt page template name: {$data['scheduler_page_name']}_T");
+                $pageTemplate->name = "{$data['scheduler_page_name']}_T";
+                $pageTemplate->flags = 0;
+                $pageTemplate->noChildren = 0;
+                $pageTemplate->noParents = 0;
+                $pageTemplate->noGlobal = 1;
+                $pageTemplate->slashUrls = 1;
+                $pageTemplate->fieldgroup = $pageFG;
+                $pageTemplate->save(); 
+            }
+
+            $page->template = $pageTemplate;
+            $page->name = $data['scheduler_page_name']; 
+            $page->title = $data['scheduler_page_title'];
+            $page->process = $this; 
+            $page->sort = $parent->numChildren;
+            $page->save();
+
+            //update config data with ids of new pages, templates, fields...
+            $data = wire('modules')->getModuleConfigData('SchedulerSystem'); 
+            $data['scheduler_page_id'] = $page->id;
+            $data['scheduler_eventsTable_id'] = $eventsTable->id;
+            $data['scheduler_equipmentTable_id'] = $equipmentTable->id;
+            $data['scheduler_fldgrp_idp_id'] = $pageFG->id;
+            $data['scheduler_tmpl_id'] = $pageTemplate->id;
+            wire('modules')->saveModuleConfigData('SchedulerSystem', $data);
+        }
+        
+        return $page;   
+    }
+
+    public function getPageTable($ptName, $ptCols, $ptLabel, $ptTags, $pid){
+
+        $f = $this->fields->get("name={$ptName}");
+
+        if(!$f->id){
+            $data = wire('modules')->getModuleConfigData('SchedulerSystem'); 
+            $fieldsArray = explode(" ", $ptCols);
+
+            $f = new Field();
+            $f->type = wire('modules')->get('FieldtypePageTable');
+            $f->name = $ptName;
+            $f->label = $ptLabel;
+            $f->tags = $ptTags;
+            $f->parent_id = $pid;
+            $f->columns = "title\n";
+            foreach ($fieldsArray as $field) {
+                $fieldShortname = substr($field, 0, strpos($field, "_"));
+                $f->columns .= $fieldShortname . "\n";
+            }
+            $f->columns = substr($f->columns, 0, -1);
+
+            //make fieldgroup for template
+            $ptFG = $this->fieldgroups->get("name=$ptName");
+            if(!$ptFG->id){
+                $ptFG = new Fieldgroup();
+                $ptFG->name = "{$ptName}_FG";
+                $ptFG->append($this->fields->get("name=title"));
+            }
+            
+            //Add fields to fieldgroup
+            foreach($fieldsArray as $fieldName) {
+                //make column fields if they do not exist
+                $fieldTypename = substr($fieldName, strpos($fieldName, "_") + 1);
+                $fieldShortname = substr($fieldName, 0, strpos($fieldName, "_"));
+                $field = $this->fields->get($fieldShortname);
+                if(!$field->id){
+                    //field does not exist
+                    $field = new Field();
+                    $field->name = $fieldShortname;
+                    $this->message("Fieldtype".$fieldTypename);
+                    $field->type = wire('modules')->get("Fieldtype".$fieldTypename);
+                    $field->label = "$ptName $fieldShortname";
+                    $field->tags = $ptTags;
+                    $field->save();
+                    $ptFG->append($field);
+                } else {
+                    //field does exist, so add it
+                  if(!$ptFG->getField($field->name)){
+                    $ptFG->append($field); 
+                  } 
+                }
+                $data['{$ptName}TableFields_ids'] .= $field->id . " ";   
+            }
+            $data['{$ptName}TableFields_ids'] = substr($data['{$ptName}TableFields_ids'], 0, -1);
+            
+            $ptFG->save();
+
+            //make template
+            $ptTemplate = $this->templates->get("name=$ptName_T");
+            if(!$ptTemplate->id){
+                $ptTemplate = new Template();
+                $ptTemplate->name = "{$ptName}_T";
+                $ptTemplate->flags = 0;
+                $ptTemplate->noChildren = 0;
+                $ptTemplate->noParents = 0;
+                $ptTemplate->noGlobal = 1;
+                $ptTemplate->slashUrls = 1;
+                $ptTemplate->fieldgroup = $ptFG;
+                $ptTemplate->save();
+            }
+            
+            $f->template_id = $ptTemplate->id;
+
+            $f->save(); 
+
+            //update config data with ids of new pages, templates, fields...
+            
+            $data['{$ptName}Tabletempl_id'] = $ptTemplate->id;
+            $data['{$ptName}Tablefldgrp_id'] = $ptFG->id;
+            wire('modules')->saveModuleConfigData('SchedulerSystem', $data);
+        }
+
+        return $f;
+
+    }
+
+    public static function getModuleConfigInputfields(array $data) {
+    	$inputfields = new InputfieldWrapper();
+
+    	return $inputfields;
+    } 
+}
 
 ?>
