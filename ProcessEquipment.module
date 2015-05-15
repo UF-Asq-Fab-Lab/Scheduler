@@ -1,0 +1,110 @@
+<?php
+/**
+ * ProcessWire Events Process
+ *
+ * Developed for the A² Fab Lab at the University of Florida.
+ * Provides backend interface for managing reservable equipment
+ *
+ * Thomas Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ * 
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ *
+ */
+
+class ProcessEquipment extends ProcessPageType {
+  //The code in this class takes heavy inspiration from
+  //Ryan Cramer's ProcessUser module.
+  static public function getModuleInfo() {
+    return array(
+      'title' => 'ProcessEquipment', // getModuleInfo title
+      'version' => 100, 
+      'summary' => 'Manage equipment', // getModuleInfo summary
+      'permanent' => false, 
+      'permission' => 'schedule-admin',
+      'icon' => 'th', 
+      'useNavJSON' => true,
+    ); 
+  }
+
+  protected $lister = null;
+
+  public function init() {
+    parent::init();
+    $this->template = $this->wire('templates')->get("name=equipment");
+    $this->lister = $this->wire('modules')->get('ProcessPageLister');
+  }
+
+  protected function getLister($selector = '') {
+    $selector = "template=equipment, include=all, check_access=0, $selector";
+    $lister = $this->lister;
+    if(!$lister) return null;
+    $lister->editMode = ProcessPageLister::windowModeDirect;
+    $properties = array(
+      'initSelector' => $selector,
+      'columns' => $this->showFields,
+      'defaultSelector' => "name%=, available=",
+      'defaultSort' => 'name',
+      'parent' => $this->page,
+      'template' => $this->template,
+      'editURL' => './edit/',
+      'addURL' => './add/',
+      'allowSystem' => false,
+      'allowIncludeAll' => true,
+    );
+    foreach($properties as $name => $val){
+      $lister->$name = $val;
+    }
+    return $lister;
+  }
+
+  protected function renderList($selector = '', $pageOptions = array()) {
+    $lister = $this->getLister($selector);
+    if(!$lister) return parent::renderList($selector, $pageOptions);
+    return $lister->execute();
+  }
+
+  public function executeConfig() { 
+    return $this->getLister()->executeConfig(); 
+  }
+  public function executeViewport() { 
+    return $this->getLister()->executeViewport(); 
+  }
+  public function executeReset() { 
+    return $this->getLister()->executeReset(); 
+  }
+  public function executeActions() { 
+    return $this->getLister()->executeActions(); 
+  }
+  public function ___executeEdit() {
+    $this->addHookAfter('ProcessPageEdit::buildForm', $this, 'hookBuildForm');
+    return parent::___executeEdit();
+  }
+
+  public function hookBuildForm(HookEvent $event) {
+    $form = $event->return;
+    $theme = $form->getChildByName('admin_theme');
+    if(!$theme) return;
+    if(!$theme->attr('value')) {
+      $theme->attr('value', $this->wire('config')->defaultAdminTheme);
+    }
+  }
+
+  public function ___executeNavJSON(array $options = array()) {
+    $equipmentPages = $this->wire('pages')->find("template=equipment");
+    
+    // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
+    $equipmentArray = array();
+    foreach($equipmentPages as $eqp) {
+      $equipmentArray[] = $eqp;
+    }
+    
+    $options['items'] = $equipmentArray;
+    $options['itemLabel'] = 'name';
+    
+    return parent::___executeNavJSON($options);
+  }
+
+}
+?>

@@ -1,0 +1,180 @@
+<?php
+/**
+ * ProcessWire Scheduler Process
+ *
+ * Developed for the A² Fab Lab at the University of Florida.
+ * Allows for the listing and management of equipment use reservations.
+ * Provides a front end interface for users to reserve equipment.
+ *
+ * Thomas Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ * 
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ *
+ */
+
+class ProcessScheduler extends Process implements ConfigurableModule {
+
+	static public function getModuleInfo(){
+    //requires ProcessEvents and ProcessEquipment
+    return array(
+      'title' => 'Scheduler',
+      'version' => 100,
+      'author' => 'Thomas Storey',
+      'summary' => 'Parent process for Events and Equipment. Provides frontend interface for managing equipment reservation.',
+      'href' => 'https://github.com/UF-Asq-Fab-Lab',
+      'requires' => array('ProcessEvent>=1.0.0', 'ProcessEquipment>=1.0.0'),
+      'icon' => 'clock-o',
+      'useNavJSON' => true,
+    );
+	}
+
+  protected $plist = null;
+  protected $eventTemplateID = 0;
+  protected $equipmentTemplateID = 0;
+
+  public function getDefaultConfig(){
+    return array(
+      "email" => "managerEmail@managerHost.com",
+      "scheduler_format" => "M-D-YYYY",
+      "scheduler_allowed_hours_per_week" => 6,
+      "event_fields" => array(
+        'title' => 'FieldtypeText',
+        'start_time' => 'FieldtypeDatetime',
+        'end_time' => 'FieldtypeDatetime',
+        'username' => 'FieldtypeText',
+        'equipment_name' => 'FieldtypeText',
+        'color' => 'FieldtypeText',
+        'email' => 'FieldtypeEmail'
+      ),
+      "equipment_fields" => array(
+        'title' => 'FieldtypeText',
+        'equipment_name' => 'FieldtypeText',
+        'color' => 'FieldtypeText',
+        'available' => 'FieldtypeCheckbox',
+        'equipment_info' => 'FieldtypeTextarea'
+      ),
+    );
+  }
+
+  private function getTemplate($fieldsArray, $type){
+    $t = $this->templates->get("name=".$type);
+    if(!$t->id){
+        $t = new Template();
+        $t->name = $type;
+        $t->tags = "scheduler";
+        $t->noChildren = 0;
+        $t->noParents = 0;
+        $t->fieldgroup = $this->getFieldgroup($fieldsArray, $type);
+        $t->save();
+    }
+    return $t;
+  }
+
+  private function getFieldgroup($fieldsArray, $type){
+    $fg = $this->fieldgroups->get("name=".$type);
+    if(!$fg->id){
+        $fg = new Fieldgroup();
+        $fg->name = $type;
+        foreach ($fieldsArray as $name => $kind) {
+            $fg->append($this->getField($name, $kind));
+        }
+        $fg->save();
+    }
+    
+    return $fg;
+  }
+
+  private function getField($name, $type){
+    $f = $this->fields->get("name=$name");
+    if(!$f->id){
+        $f = new Field();
+        $f->name = $name;
+        $f->type = $type;
+        $f->label = ucwords(str_replace("_", " ", $name));
+        $f->tags = "scheduler";
+        $f->save();
+    }
+    return $f;
+  }
+
+  private function getSchedulerPage(){
+    $p = $this->wire('pages')->get("name=scheduler");
+    if(!$p->id){
+      $p = new Page();
+      $p->template = "admin";
+      $p->name = "scheduler";
+      $p->title = "Scheduler";
+      $p->process = $this->wire('modules')->get('ProcessList');
+      $p->parent = $this->wire('pages')->get($this->wire('config')->adminRootPageID);
+      $p->save();
+    }
+    return $p->id;
+  }
+
+  private function getProcessPage($type, $parent){
+    $p = $this->wire('pages')->get("name=".$type);
+    if(!$p->id){
+      $p = new Page();
+      $p->template = "admin";
+      $p->name = $type;
+      $p->title = ucwords($type);
+      $p->process = $this->wire('modules')->get('Process'.ucwords($type));
+      $p->parent = $parent;
+      $p->save();
+    }
+    return $p->id;
+  }
+
+	public function ___install() {
+    $defaults = self::getDefaultConfig();
+    //create an Event template
+    $eventTemplate = $this->getTemplate($defaults['event_fields'], 'event');
+    $this->eventTemplateID = $eventTemplate->id;
+    //create an Equipment template
+    $equipmentTemplate = $this->getTemplate($defaults['equipment_fields'], 'equipment');
+    $this->equipmentTemplateID = $equipmentTemplate->id;
+	  //create a page under Admin, give it the ProcessList process
+    $schedulerPage = $this->getSchedulerPage();
+	  //give that page two children, each with a process that inherits from ProcessPageType (ProcessEvents, and ProcessEquipment)
+    $eventsPage = $this->getProcessPage("event", $schedulerPage);
+    $equipmentPage = $this->getProcessPage("equipment", $schedulerPage);
+	}
+
+	public function ___uninstall() {
+    $defaults = self::getDefaultConfig();
+    //remove all event pages
+    $events = $this->wire('pages')->find("template=event, include=all, check_access=0");
+    foreach($events as $e){
+      $this->wire('pages')->delete($e, true);
+    }
+    //remove all equipment pages
+    $equipment = $this->wire('pages')->find("template=equipment, include=all, check_access=0");
+    foreach ($equipment as $eq) {
+      $this->wire('pages')->delete($eq, true);
+    }
+    //remove templates
+    $eventsTemplate = $this->wire('templates')->get("name=event, include=all, check_access=0");
+    if($eventsTemplate->id) $this->wire('templates')->delete();
+    $equipmentTemplate = $this->wire('templates')->get("name=equipment, include=all, check_access=0");
+    if($equipmentTemplate->id) $this->wire('templates')->delete();
+    //remove fields
+    $eventFields = $defaults['event_fields'];
+    foreach ($eventFields as $field){
+      $eventField = $this->wire('fields')->get("name=".$field.", include=all, check_access=0");
+      if($eventField->id) $this->wire('fields')->delete($eventField);
+    }
+    $equipmentFields = $defaults['equipment_fields'];
+    foreach ($equipmentFields as $field){
+      $equipmentField = $this->wire('fields')->get("name=".$field.", include=all, check_access=0");
+      if($equipmentField->id) $this->wire('fields')->delete($equipmentField);
+    }
+    //remove scheduler page
+    $schedulerPage = $this->wire('pages')->get("name=scheduler, include=all, check_access=0");
+    if($schedulerPage->id) $this->wire('pages')->delete($schedulerPage, true);
+    parent::___uninstall();
+	}
+}
+
+?>
