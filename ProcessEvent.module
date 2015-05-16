@@ -99,6 +99,7 @@ class ProcessEvent extends ProcessPageType {
 
   public function ___executeNavJSON(array $options = array()) {
     $eventPages = $this->wire('pages')->find("template=event");
+    $parentID = $this->page->id;
     
     // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
     $eventArray = array();
@@ -108,6 +109,7 @@ class ProcessEvent extends ProcessPageType {
     
     $options['items'] = $eventArray;
     $options['itemLabel'] = 'name';
+    $options['add'] = "add/?parent_id=".$parentID;
     
     return parent::___executeNavJSON($options);
   }

@@ -26,6 +26,8 @@ class ProcessScheduler extends Process implements ConfigurableModule {
       'href' => 'https://github.com/UF-Asq-Fab-Lab',
       'requires' => array('ProcessEvent>=1.0.0', 'ProcessEquipment>=1.0.0'),
       'icon' => 'clock-o',
+      'singular' => true,
+      'autoload' => true,
       'useNavJSON' => true,
     );
 	}
@@ -34,11 +36,13 @@ class ProcessScheduler extends Process implements ConfigurableModule {
   protected $eventTemplateID = 0;
   protected $equipmentTemplateID = 0;
 
-  public function getDefaultConfig(){
+  public static function getDefaultConfig(){
     return array(
       "email" => "managerEmail@managerHost.com",
       "scheduler_format" => "M-D-YYYY",
       "scheduler_allowed_hours_per_week" => 6,
+      "scheduler_page" => '/schedule',
+      "scheduler_filepath" => '/var/www/html/ProcessWire-dev/modules/ProcessScheduler/Scheduler',
       "event_fields" => array(
         'title' => 'FieldtypeText',
         'start_time' => 'FieldtypeDatetime',
@@ -56,6 +60,50 @@ class ProcessScheduler extends Process implements ConfigurableModule {
         'equipment_info' => 'FieldtypeTextarea'
       ),
     );
+  }
+
+  public function init() {
+    if(isset($_SERVER['REQUEST_URI']) && 
+      strpos($_SERVER['REQUEST_URI'], $this->scheduler_page) !== false) {
+      $this->addHookAfter('TemplateFile::render', $this, 'renderScheduler');
+    }
+  }
+
+  protected function renderScheduler(HookEvent $event){
+    $template = $event->object;
+    $options = $template->options;
+    $defaults = self::getDefaultConfig();
+
+    $eventPages = $this->wire('pages')->find("template=event");
+    $equipmentPages = $this->wire('pages')->find("template=equipment, available=1");
+
+    $json = $this->pagesToJSON($eventPages, "events") . "\n" . $this->pagesToJSON($equipmentPages, "equipment");
+
+    if(is_array($options) && array_key_exists('pageStack', $options)){
+      ob_start();
+      require($defaults['scheduler_filepath'].".php");
+      $output = "\n" . ob_get_contents() . "\n";
+      ob_end_clean();
+      //TO DO: Add stylesheet to output
+      $output = "<script type='text/javascript'>" . $json . "</script>" . $output;
+      $event->return = str_ireplace("[scheduler]", $output, $event->return);
+    }
+  }
+
+  private function pagesToJSON($pageArray, $varName){
+    $out = "var " . $varName . " = [ \n";
+    foreach ($pageArray as $key => $value) {
+      $out .= "{ \n";
+      $properties = $value->getIterator();
+      foreach ($properties as $propKey => $propValue) {
+        $out .= $propKey . " : " . $propValue . ",\n";
+      }
+      $out = rtrim($out, ",\n");
+      $out .= "\n},\n";
+    }
+    $out = rtrim($out, ",\n");
+    $out .= "];";
+    return $out;
   }
 
   private function getTemplate($fieldsArray, $type){
@@ -143,6 +191,7 @@ class ProcessScheduler extends Process implements ConfigurableModule {
 	}
 
 	public function ___uninstall() {
+    //TO DO: Uninstall is totally worthless for some reason???
     $defaults = self::getDefaultConfig();
     //remove all event pages
     $events = $this->wire('pages')->find("template=event, include=all, check_access=0");
@@ -175,6 +224,44 @@ class ProcessScheduler extends Process implements ConfigurableModule {
     if($schedulerPage->id) $this->wire('pages')->delete($schedulerPage, true);
     parent::___uninstall();
 	}
+
+  public static function getModuleConfigInputfields(array $data) {
+    $inputfields = new InputfieldWrapper();
+    $defaults = self::getDefaultConfig();
+
+    // ask for upload page url
+    $field = wire('modules')->get('InputfieldText');
+    $field->name = 'scheduler_page';
+    $field->label = "Please provide the path to the page that should display the scheduler interface.";
+    if(isset($data['scheduler_page'])){
+      $field->value = $data['scheduler_page'];
+    } else {
+      $field->value = $defaults['scheduler_page'];
+    }
+    $inputfields->add($field);
+
+    $field = wire('modules')->get('InputfieldText');
+    $field->name = 'scheduler_format';
+    $field->label = "The formatting for dates as displayed and received by the scheduler interface.";
+    if(isset($data['scheduler_format'])){
+      $field->value = $data['scheduler_format'];
+    } else {
+      $field->value = $defaults['scheduler_format'];
+    }
+    $inputfields->add($field);
+
+    $field = wire('modules')->get('InputfieldInteger');
+    $field->name = 'scheduler_allowed_hours_per_week';
+    $field->label = "The number of hours per week users are allowed to reserve equipment from the lab.";
+    if(isset($data['scheduler_allowed_hours_per_week'])){
+      $field->value = $data['scheduler_allowed_hours_per_week'];
+    } else {
+      $field->value = $defaults['scheduler_allowed_hours_per_week'];
+    }
+    $inputfields->add($field);
+
+    return $inputfields;
+  }
 }
 
 ?>
