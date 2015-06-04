@@ -1,16 +1,28 @@
+
+<link rel='stylesheet' href='<?php echo wire("config")->urls->siteModules?>ProcessScheduler/lib/fullcalendar.min.css' />
+<link rel='stylesheet' href='<?php echo wire("config")->urls->siteModules?>ProcessScheduler/scheduler-style.css' />
+<script src='<?php echo wire("config")->urls->siteModules?>ProcessScheduler/lib/jquery.min.js'></script>
+<script src='<?php echo wire("config")->urls->siteModules?>ProcessScheduler/lib/moment.min.js'></script>
+<script src='<?php echo wire("config")->urls->siteModules?>ProcessScheduler/lib/fullcalendar.min.js'></script>
+
+
 <?php
 
 // reservation form
 $message = '';
 
 $data = wire('modules')->getModuleConfigData('ProcessScheduler');
+$page = wire('pages')->get('/scheduler');
 
 // the actual reservation function, called when the user clicks "Reserve" in the overlay/
 
 function reserve($equipment, $owner, $color, $start, $end){
+  $message = '';
   $eventsPage = wire("pages")->get("name=event");
-  $startdate = date_create($start);
-  $enddate = date_create($end);
+  $startdate = date_create();
+  date_timestamp_set($startdate, intval($start));
+  $enddate = date_create();
+  date_timestamp_set($enddate, intval($end));
 
   if(!validateFormat($startdate, $enddate)) return;
 
@@ -29,11 +41,13 @@ function reserve($equipment, $owner, $color, $start, $end){
   
   // All rules passed, make event
   $newevent = new Page();
+  $newevent->template = wire('templates')->get("name=event");
+  $newevent->title = $owner . " " . $equipment . " " . $start;
   $newevent->username = $owner;
-  $newevent->equipmentName = $equipment;
+  $newevent->equipment_name = $equipment;
   $newevent->color = $color;
-  $newevent->start = $start;
-  $newevent->end = $end;
+  $newevent->start_time = $start;
+  $newevent->end_time = $end;
   $newevent->parent = $eventsPage;
   $newevent->save();
 
@@ -44,9 +58,11 @@ function reserve($equipment, $owner, $color, $start, $end){
 }
 
 function validateAdvanceTime ($startTS){
-  $thresholdH = $data['reservationBuffer'];
+  $data = wire('modules')->getModuleConfigData('ProcessScheduler');
+  $thresholdH = $data['reservation_buffer'];
   $threshold = $thresholdH*60*60; //convert from hours to seconds
   $t = $startTS - $threshold;
+  echo "t: " . $t . " threshold: ". $threshold . " startTS: " . $startTS . " now: " . date_timestamp_get(date_create("now"));
   if($t < date_timestamp_get(date_create("now"))){
     $message .= "<p>Reservations must be made at least {$thresholdH} hours in advance.</p>";
     echo "<em class='error'>" . $message . "</em>";
@@ -57,6 +73,7 @@ function validateAdvanceTime ($startTS){
 }
 
 function validateFormat ($start, $end){
+  $data = wire('modules')->getModuleConfigData('ProcessScheduler');
   // Check for invalid formatting on input strings //
   if (!$start || !$end) {
       $message .= "<p>Invalid format.</p>";
@@ -68,9 +85,10 @@ function validateFormat ($start, $end){
 }
 
 function validateDuration ($start, $end) {
+  $data = wire('modules')->getModuleConfigData('ProcessScheduler');
   $dur = $end - $start;
-  $minDurH = $data['minReservationTime'];
-  $maxDurH = $data['maxReservationTime'];
+  $minDurH = $data['min_reservation_time'];
+  $maxDurH = $data['max_reservation_time'];
   $minDur = $minDurH*60*60;
   $maxDur = $maxDurH*60*60;
   if(!($dur >= $minDur) && ($dur <= $maxDur)){
@@ -83,9 +101,9 @@ function validateDuration ($start, $end) {
 }
 
 function validateAccumulatedTime ($startTS, $endTS) {
-  $schedulerPage = wire("pages")->get("name=".$data['scheduler_page_name']);
+  $data = wire('modules')->getModuleConfigData('ProcessScheduler');
   $user_accumulated_time = 0;
-  $events = $schedulerPage->children;
+  $events = wire('pages')->find("template=event");
   foreach ($events as $event) {
     if($event->start){
       $EstartTS = date_timestamp_get(date_create($event->start));
@@ -111,9 +129,9 @@ function validateAccumulatedTime ($startTS, $endTS) {
 }
 
 function validateEventOverlap ($equipment, $start, $end) {
-  $schedulerPage = wire("pages")->get("name=".$data['scheduler_page_name']);
+  $data = wire('modules')->getModuleConfigData('ProcessScheduler');
   $user_accumulated_time = 0;
-  $events = $schedulerPage->children;
+  $events = wire('pages')->find("template=event");
   foreach ($events as $event) {
     if($event->start){
       $EstartTS = date_timestamp_get(date_create($event->start));
@@ -142,20 +160,21 @@ function validateEventOverlap ($equipment, $start, $end) {
 }
 
   // Construct reservation parameters on click 
-if($input->post->submit){
-  $equipment = $input->post->equipment;
-  $owner = $sanitizer->pageName($user->name);
+if(wire("input")->post->submit){
+  echo "submit";
+  $equipment = wire("input")->post->equipment;
+  $owner = wire('sanitizer')->pageName(wire('user')->name);
   $color = "#AAAAAA";
-  $schedulerPage = wire("pages")->get("name=".$data['scheduler_page_name']);
-  foreach ($schedulerPage->children as $eq) {
+  $equipPages = wire("pages")->find("template=equipment");
+  foreach ($equipPages as $eq) {
     if($equipment == $eq->title){
       $color = $eq->color;
       break;
     }
   }
 
-  $start = $input->post->start;
-  $end = $input->post->end;
+  $start = wire("input")->post->start;
+  $end = wire("input")->post->end;
 
   reserve($equipment, $owner, $color, $start, $end);
 }
@@ -178,11 +197,11 @@ echo '<p><br></p>';
 <div id="overlay">
      <div>
         <p id="form-message"></p>
-          <form method="post" action="./" enctype="multipart/form-data">
+          <form id="form-reserve" method="post" action="./" enctype="multipart/form-data">
             <p><label for="start">Start Time:</label></p>
-            <p><input type="text" name="start" required></p>
+            <p><input type="text" name="start" id="start" required></p>
             <p><label for="end">End Time:</label></p>
-            <p><input type="text" name="end" required></p>
+            <p><input type="text" name="end" id="end" required></p>
         <p><label for="machine">Equipment to Reserve:</label></p>
         <p><select name="equipment" id="equipmentdropdown">
       <option selected="selected">Choose Equipment</option>
@@ -194,17 +213,29 @@ echo '<p><br></p>';
      </div>
 </div>
 
+<div id="overlay-bg"></div>
+
 <script type="text/javascript">
 
 function overlay (start, end) {
   el = $("#overlay");
   el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
-  $('[name=start]').val(start.format(config.datetime_format));
-  $('[name=end]').val(end.format(config.datetime_format));
+  el = $("#overlay-bg");
+  el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
+  $('[name=start]').val(start.format(config.scheduler_format));
+  $('[name=end]').val(end.format(config.scheduler_format));
 };
+
+function reserve (event) {
+  $("#start").val(moment($("#start").val(), config.scheduler_format).unix());
+  $("#end").val(moment($("#end").val(), config.scheduler_format).unix());
+  //event.preventDefault();
+}
 
 function overlaycancel () {
   el = $("#overlay");
+  el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
+  el = $("#overlay-bg");
   el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
 };
 
@@ -213,12 +244,24 @@ function reloadCalendar () {
 };
 
 $(document).ready(function() {
-
+    events = events.map(function (cv, i) {
+      cv.start = moment.unix(parseInt(cv.start)).format();
+      cv.end = moment.unix(parseInt(cv.end)).format();
+      cv = {
+        title : cv.title,
+        start : cv.start,
+        end : cv.end
+      };
+      console.log(cv);
+      return cv;
+    });
      // page is now ready, initialize the calendar...
     $("#overlaycancel").click(overlaycancel);
 
+    $("#form-reserve").submit(reserve);
+
     equipment.forEach(function(eq){
-      $('#equipmentdropdown').append("<option>"+eq.name+"</option>");
+      $('#equipmentdropdown').append("<option>"+eq.equipment_name+"</option>");
     });
 
     $('#calendar').fullCalendar({
@@ -235,7 +278,7 @@ $(document).ready(function() {
       },
       editable: false,
       events: events, //events source
-      timeFormat : config.calendarFormat
+      timeFormat : config.scheduler_format
     });
     
 });

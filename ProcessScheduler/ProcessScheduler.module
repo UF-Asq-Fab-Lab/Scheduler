@@ -39,10 +39,13 @@ class ProcessScheduler extends Process implements ConfigurableModule {
   public static function getDefaultConfig(){
     return array(
       "email" => "managerEmail@managerHost.com",
-      "scheduler_format" => "M-D-YYYY",
+      "scheduler_format" => "M-D-YYYY h:mm a",
       "scheduler_allowed_hours_per_week" => 6,
+      "reservation_buffer" => 6, 
+      "min_reservation_time" => 0.5,
+      "max_reservation_time" => 2.0,
       "scheduler_page" => '/schedule',
-      "scheduler_filepath" => '/var/www/html/ProcessWire-dev/modules/ProcessScheduler/Scheduler',
+      "scheduler_filepath" => '/var/www/html/ProcessWire-dev/site/modules/ProcessScheduler/Scheduler',
       "event_fields" => array(
         'title' => 'FieldtypeText',
         'start_time' => 'FieldtypeDatetime',
@@ -63,8 +66,11 @@ class ProcessScheduler extends Process implements ConfigurableModule {
   }
 
   public function init() {
+    $defaults = self::getDefaultConfig();
+    wire('modules')->saveModuleConfigData($this, $defaults); 
     if(isset($_SERVER['REQUEST_URI']) && 
-      strpos($_SERVER['REQUEST_URI'], $this->scheduler_page) !== false) {
+      strpos($_SERVER['REQUEST_URI'], $defaults['scheduler_page']) !== false) {
+      
       $this->addHookAfter('TemplateFile::render', $this, 'renderScheduler');
     }
   }
@@ -78,14 +84,15 @@ class ProcessScheduler extends Process implements ConfigurableModule {
     $equipmentPages = $this->wire('pages')->find("template=equipment, available=1");
 
     $json = $this->pagesToJSON($eventPages, "events") . "\n" . $this->pagesToJSON($equipmentPages, "equipment");
-
+    $configjs = "\n".$this->configToJSON();
+    //echo $defaults['scheduler_filepath'].".php";
     if(is_array($options) && array_key_exists('pageStack', $options)){
       ob_start();
       require($defaults['scheduler_filepath'].".php");
       $output = "\n" . ob_get_contents() . "\n";
       ob_end_clean();
       //TO DO: Add stylesheet to output
-      $output = "<script type='text/javascript'>" . $json . "</script>" . $output;
+      $output = "<script type='text/javascript'>" . $json . $configjs. "</script>" . $output;
       $event->return = str_ireplace("[scheduler]", $output, $event->return);
     }
   }
@@ -96,7 +103,15 @@ class ProcessScheduler extends Process implements ConfigurableModule {
       $out .= "{ \n";
       $properties = $value->getIterator();
       foreach ($properties as $propKey => $propValue) {
-        $out .= $propKey . " : " . $propValue . ",\n";
+        if(strcmp($propKey, "start_time")==0){
+          $out .= '"start"'. " : " . '"'.$this->sanitizeJSON($propValue).'"' . ",\n";
+        }
+        else if(strcmp($propKey, "end_time")==0){
+          $out .= '"end"'. " : " . '"'.$this->sanitizeJSON($propValue).'"' . ",\n";
+        }
+        else {
+          $out .= '"'.$this->sanitizeJSON($propKey).'"'. " : " . '"'.$this->sanitizeJSON($propValue).'"' . ",\n";
+        }
       }
       $out = rtrim($out, ",\n");
       $out .= "\n},\n";
@@ -104,6 +119,18 @@ class ProcessScheduler extends Process implements ConfigurableModule {
     $out = rtrim($out, ",\n");
     $out .= "];";
     return $out;
+  }
+
+  private function sanitizeJSON($value){
+    $value = str_replace('"', '\"', $value);
+    return $value;
+  }
+
+  private function configToJSON(){
+    $defaults = self::getDefaultConfig();
+    $out = "var config = {scheduler_format : '" . $defaults["scheduler_format"] . "',";
+    $out .= "scheduler_allowed_hours_per_week : ". $defaults["scheduler_allowed_hours_per_week"] ."};";
+    return $out; 
   }
 
   private function getTemplate($fieldsArray, $type){
@@ -188,6 +215,7 @@ class ProcessScheduler extends Process implements ConfigurableModule {
 	  //give that page two children, each with a process that inherits from ProcessPageType (ProcessEvents, and ProcessEquipment)
     $eventsPage = $this->getProcessPage("event", $schedulerPage);
     $equipmentPage = $this->getProcessPage("equipment", $schedulerPage);
+    wire('modules')->saveModuleConfigData($this, $defaults); 
 	}
 
 	public function ___uninstall() {
