@@ -6,7 +6,7 @@
  * Allows for the listing and management of equipment use reservations.
  * Provides a front end interface for users to reserve equipment.
  *
- * Thomas Storey, 2015
+ * Thomas R Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
  * 
  * http://fablab.arts.ufl.edu
@@ -215,7 +215,7 @@ class ProcessScheduler extends Process implements ConfigurableModule {
 	  //give that page two children, each with a process that inherits from ProcessPageType (ProcessEvents, and ProcessEquipment)
     $eventsPage = $this->getProcessPage("event", $schedulerPage);
     $equipmentPage = $this->getProcessPage("equipment", $schedulerPage);
-    wire('modules')->saveModuleConfigData($this, $defaults); 
+    wire('modules')->saveModuleConfigData($this, $defaults);
 	}
 
 	public function ___uninstall() {
@@ -233,9 +233,9 @@ class ProcessScheduler extends Process implements ConfigurableModule {
     }
     //remove templates
     $eventsTemplate = $this->wire('templates')->get("name=event, include=all, check_access=0");
-    if($eventsTemplate->id) $this->wire('templates')->delete();
+    if($eventsTemplate->id) $this->wire('templates')->delete($eventsTemplate);
     $equipmentTemplate = $this->wire('templates')->get("name=equipment, include=all, check_access=0");
-    if($equipmentTemplate->id) $this->wire('templates')->delete();
+    if($equipmentTemplate->id) $this->wire('templates')->delete($equipmentTemplate);
     //remove fields
     $eventFields = $defaults['event_fields'];
     foreach ($eventFields as $field){

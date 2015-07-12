@@ -1,0 +1,355 @@
+<?php
+
+/**
+ * A²Fab Lab Scheduler Module
+ *
+ * Developed for the A² Fab Lab at the University of Florida.
+ * Root Module that handles installing, uninstalling and hooking together
+ * the child modules for the Scheduler system. Installs ProcessEvent,
+ * ProcessEquipment, and handles the frontend schedule page.
+ *
+ * Thomas R Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ *
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ *
+ */
+
+ class Scheduler extends WireData implements Module, ConfigurableModule {
+   protected $schedulerPageID;
+   protected $response;
+   protected $inputfields;
+
+   public static function getModuleInfo(){
+     return array(
+       'title' => 'A² Fab Lab Scheduler System',
+       'summary' => 'The Root Module for the A² Fab Lab Scheduler System',
+       'version' => 100,
+       'author' => "Thomas R Storey",
+       'autoload' => true,
+       'singular' => true,
+       'permanent' => false,
+       'installs' => array("ProcessEvent, ProcessEquipment")
+     );
+   }
+
+   public static function getDefaultConfig(){
+     return array(
+       'scheduler_page_id' => array(
+        'type' => 'InputfieldInteger',
+        'value' => 0,
+        'label' => 'Scheduler Page ID (should be filled automatically, but you may need to change it if you move the login page)',
+         ),
+         "scheduler_format" => array(
+           'type' => 'InputfieldText',
+           'value' => "M-D-YYYY h:mm a",
+           'label' => 'How should dates be stored and displayed? See: http://php.net/manual/en/datetime.formats.php'
+         ),
+         "max_hours_per_week" => array(
+           'type' => 'InputfieldInteger',
+           'value' => 6,
+           'label' => 'How many hours are users allowed to reserve equipment for per week?'
+         ),
+         "reservation_buffer" => array(
+           'type' => 'InputfieldInteger',
+           'value' => 6,
+           'label' => 'How many hours in advance must users schedule their reservation time?'
+         ),
+         "cancellation_buffer" => array(
+           'type' => 'InputfieldInteger',
+           'value' => 6,
+           'label' => 'How many hours in advance must users cancel reserved times?'
+         ),
+         "min_reservation_time" => array(
+           'type' => 'InputfieldFloat'
+           'value' => 0.5,
+           'label' => 'How long in hours can a reservation last, at minimum?'
+         ),
+         "max_reservation_time" => array(
+           'type' => 'InputfieldFloat',
+           'value' => 2.0,
+           'label' => 'How long in hours can a reservation last, at maximum?'
+         )
+       );
+     }
+
+     public static function getInputfields(){
+       return array(
+         'reservation_form' => array (
+            'start_time' => array(
+              'type' => 'text',
+              'label' => 'Reservation Start',
+              'id' => 'start_time',
+              'name' => 'start_time',
+              'required' => 'required',
+              'value' => '',
+              'placeholder' => 'MM/DD/YYYY HH:MM am'
+            ),
+            'end_time' => array(
+              'type' => 'text',
+              'label' => 'Reservation End',
+              'id' => 'end_time',
+              'name' => 'end_time',
+              'required' => 'required',
+              'value' => '',
+              'placeholder' => 'MM/DD/YYYY HH:MM am'
+            ),
+            'equipment' => array(
+              'type' => 'select',
+              'label' => 'Equipment',
+              'id' => 'equipment',
+              'name' => 'equipment',
+              'required' => 'required',
+              'value' => 'Choose Equipment'
+            ),
+            'reserve' => array(
+              'type' => 'submit',
+              'label' => 'Reserve',
+              'id' => 'reserve',
+              'name' => 'reserve',
+              'value' => 'Reserve',
+              'required' => ''
+            ),
+            'cancel' => array(
+              'type' => 'button',
+              'label' => 'Cancel',
+              'id' => 'overlay-cancel',
+              'name' => 'overlay-cancel',
+              'value' => 'Cancel',
+              'required' => ''
+            )
+         )
+       );
+     }
+
+     public function init(){
+       $this->data = wire('modules')->getModuleConfigData($this);
+       $this->inputfields = self::getInputfields();
+       $this->schedulerPageID = $this->data["scheduler_page_id"];
+       $this->response = array();
+     }
+
+     public function ready(){
+       $this->handleMakeReservation();
+       $this->handleCancelReservation();
+
+       $this->hookBuildForms();
+     }
+
+     protected function handleMakeReservation(){
+       $page = wire('page');
+       $post = wire('input')->post;
+       if($post->reserve){
+         $this->response = array();
+         if($this->validateReservation($post)){
+           $event = new Page();
+           $event->template = wire('templates')->get("name=event");
+           $event->title = wire('user')->name . " " . $post->equipment . " " . $post->start_time;
+           $event->start_time = $post->start_time;
+           $event->end_time = $post->end_time;
+           $event->equipment = $post->equipment;
+           $event->username = wire('user')->name;
+           $event->color = wire('pages')->get("title=$post->equipment")->color;
+           $event->email = wire('user')->email;
+           $event->parent = wire('pages')->get('name=events');
+           $event->save();
+           $this->response[] = "<p class='message'>Reservation Successful";
+         } else {
+          //  Don't do anything, validateReservation handles the response here.
+         }
+       }
+     }
+
+     protected function handleCancelReservation(){
+       $page = wire('page');
+       $post = wire('input')->post;
+       if($post->cancel){
+         $this->response = array();
+         if($this->validateCancellation($post)){
+           wire('pages')->delete(wire('pages')->get($post->id), true);
+           $this->response[] = "<p class='message'>Reservation Cancelled</p>";
+         } else {
+          //  validateCancellation handles error messages
+         }
+       }
+     }
+
+     protected function validateReservation($post){
+       $valid = true;
+       $start_time = $post->start_time;
+       $end_time = $post->end_time;
+       $equipment = $post->equipment;
+       $startdate = date_create();
+       date_timestamp_set($startdate, intval($start_time));
+       $enddate = date_create();
+       date_timestamp_set($enddate, intval($end_time));
+       $valid = validateFormat($startdate, $enddate);
+       $startTS = date_timestamp_get($startdate);
+       $endTS = date_timestamp_get($enddate);
+
+       // Reservation Rules
+       $valid = validateAdvanceTime($startTS);
+       $valid = validateDuration($start_time, $end_time);
+       $valid = validateEventOverlap($equipment, $start_time, $end_time);
+       $valid = validateAccumulatedTime($startTS, $endTS);
+
+       return $valid;
+     }
+
+     protected function validateCancellation($post){
+       $valid = true;
+       $event = wire('pages')->get("id=$post->id, template=event");
+       $start_time = $event->start_time;
+       $startdate = date_create();
+       date_timestamp_set($startdate, intval($start_time));
+       $startTS = date_timestamp_get($startdate);
+       $valid = validateAdvanceTime($startTS);
+       return $valid;
+     }
+
+     protected function validateEventOverlap ($equipment, $start, $end) {
+       $events = wire('pages')->find("template=event");
+       foreach ($events as $event) {
+         if($event->start_time){
+           $EstartTS = date_timestamp_get(date_create($event->start_time));
+           $EendTS = date_timestamp_get(date_create($event->end_time));
+
+           if($event->equipment == $equipment){
+             if($startTS >= $EstartTS && $startTS <= $EendTS){
+               $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
+               return false;
+             } else if($endTS >= $EstartTS && $endTS <= $EendTS){
+               $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
+               return false;
+             } else if($startTS <= $EstartTS && $endTS >= $EendTS){
+               $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
+               return false;
+             }
+           }
+         }
+       }
+       return true;
+     }
+
+    protected function validateAccumulatedTime ($startTS, $endTS) {
+       $data = $this->data;
+       $user_accumulated_time = 0;
+       $events = wire('pages')->find("template=event");
+       foreach ($events as $event) {
+         if($event->start_time){
+           $EstartTS = date_timestamp_get(date_create($event->start_time));
+           $EendTS = date_timestamp_get(date_create($event->end_time));
+
+           if($event->username == wire("user")->name &&
+             (strtotime("last Sunday", $startTS) < $EstartTS) &&
+             ($EstartTS < strtotime("next Sunday", $startTS))) {
+             //if the event being considered matches the current user AND
+             //that event is in the same week as the new event
+             $user_accumulated_time += ($EendTS - $EstartTS); //add duration to accumulated time
+           }
+         }
+       }
+       $h = $data['allowed_hours_per_week'];
+       $hpw = $h * 60 * 60; //time per week in seconds
+       if($user_accumulated_time + ($endTS - $startTS) > $hpw){
+         $this->response[] = "<p class='error'>You may only reserve up to {$h} hours per week.</p>";
+         return false;
+       }
+       return true;
+     }
+
+    protected function validateDuration ($start, $end) {
+      $data = $this->data;
+      $dur = $end - $start;
+      $minDurH = $data['min_reservation_time'];
+      $maxDurH = $data['max_reservation_time'];
+      $minDur = $minDurH*60*60;
+      $maxDur = $maxDurH*60*60;
+      if(!($dur >= $minDur) && ($dur <= $maxDur)){
+        $this->response[] = "<p class='error'>Reservations must be at least {$minDurH} hour(s) and no greater than {$maxDurH} hours in length.</p>";
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function validateFormat ($start, $end){
+      $data = $this->data;
+      // Check for invalid formatting on input strings //
+      if (!$start || !$end) {
+          $this->response[] = "<p class='error'>Invalid Date/Time format.</p>";
+          return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function validateAdvanceTime ($startTS){
+      $data = $this->data;
+      $thresholdH = $data['reservation_buffer'];
+      $threshold = $thresholdH*60*60; //convert from hours to seconds
+      $t = $startTS - $threshold;
+      if($t < date_timestamp_get(date_create("now"))){
+        $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function validateCancellationBuffer($startTS){
+      $data = $this->data;
+      $thresholdH = $data['cancellation_buffer'];
+      $threshold = $thresholdH*60*60; //convert from hours to seconds
+      $t = $startTS - $threshold;
+      if($t < date_timestamp_get(date_create("now"))){
+        $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function hookBuildForms(){
+      $page = wire('page');
+      if($page->id == $this->schedulerPageID){
+        $this->addHookAfter('TemplateFile::render', $this, 'hookSchedulerForm');
+      }
+    }
+
+    protected function hookSchedulerForm(HookEvent $event){
+      $page = wire('page');
+      $form = "";
+      foreach ($this->response as $msg) {
+        $form.=$msg;
+      }
+      $form.="<div id='calendar'></div>";
+      $form.="<div id='overlay'><div><form id='reserve' method='post' action='./' enctype='multipart/form-data'>";
+      foreach ($this->inputfields as $key => $attrs) {
+        $form.="<p><label for='".$attrs['id']."'>".$attrs['label']."</label></p>";
+
+        if($attrArray['name'] != "equipment"){
+          $form.="<p><input type='".$attrs['type']."' name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required']."></p>";
+        } else {
+          $form.="<p><select name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required'].">";
+          $options = wire('pages')->find('template=equipment, available=1');
+          foreach ($option as $optkey => $optpage) {
+            $form.="<option value='".$optpage->name."'>".$optpage->title"</option>";
+          }
+          $form.="</select></p>"
+        }
+      }
+      $modulesUrl = wire('config')->urls->siteModules;
+      $form.="</form></div></div><div id='overlay-bg'></div>";
+      $form.="<script type='text/javascript' src='{$modulesUrl}Scheduler/Scheduler.js'></script>";
+      $prepend = "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
+      $prepend.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
+      $prepend.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/moment.min.js'></script>";
+      $prepend.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/fullcalendar.min.js'></script>";
+      $event->return = $prepend.str_replace("[scheduler]", $form, $event->return);
+    }
+}
+
+
+?>

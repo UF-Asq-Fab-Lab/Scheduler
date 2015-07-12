@@ -1,0 +1,605 @@
+<?php
+
+/**
+ * A²Fab Lab Scheduler Module
+ *
+ * Developed for the A² Fab Lab at the University of Florida.
+ * Root Module that handles installing, uninstalling and hooking together
+ * the child modules for the Scheduler system. Installs ProcessEvent,
+ * ProcessEquipment, and handles the frontend schedule page.
+ *
+ * Thomas R Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ *
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ *
+ */
+
+ class Scheduler extends WireData implements Module, ConfigurableModule {
+   protected $schedulerPageID;
+   protected $response;
+   protected $inputfields;
+
+   public static function getModuleInfo(){
+     return array(
+       'title' => 'A² Fab Lab Scheduler System',
+       'summary' => 'The Root Module for the A² Fab Lab Scheduler System',
+       'version' => 100,
+       'author' => "Thomas R Storey",
+       'autoload' => true,
+       'singular' => true,
+       'permanent' => false,
+       'installs' => array("ProcessEvent, ProcessEquipment")
+     );
+   }
+
+   public static function getDefaultConfig(){
+     return array(
+       'scheduler_page_id' => array(
+        'type' => 'InputfieldInteger',
+        'value' => 0,
+        'label' => 'Scheduler Page ID (should be filled automatically, but you may need to change it if you move the login page)',
+         ),
+         "scheduler_format" => array(
+           'type' => 'InputfieldText',
+           'value' => "M-D-YYYY h:mm a",
+           'label' => 'How should dates be stored and displayed? See: http://php.net/manual/en/datetime.formats.php'
+         ),
+         "max_hours_per_week" => array(
+           'type' => 'InputfieldInteger',
+           'value' => 6,
+           'label' => 'How many hours are users allowed to reserve equipment for per week?'
+         ),
+         "reservation_buffer" => array(
+           'type' => 'InputfieldInteger',
+           'value' => 6,
+           'label' => 'How many hours in advance must users schedule their reservation time?'
+         ),
+         "cancellation_buffer" => array(
+           'type' => 'InputfieldInteger',
+           'value' => 6,
+           'label' => 'How many hours in advance must users cancel reserved times?'
+         ),
+         "min_reservation_time" => array(
+           'type' => 'InputfieldFloat',
+           'value' => 0.5,
+           'label' => 'How long in hours can a reservation last, at minimum?'
+         ),
+         "max_reservation_time" => array(
+           'type' => 'InputfieldFloat',
+           'value' => 2.0,
+           'label' => 'How long in hours can a reservation last, at maximum?'
+         )
+       );
+     }
+
+     public static function getInputfields(){
+       return array(
+         'reservation_form' => array (
+            'start_time' => array(
+              'type' => 'text',
+              'label' => 'Reservation Start',
+              'id' => 'start_time',
+              'name' => 'start_time',
+              'required' => 'required',
+              'value' => '',
+              'placeholder' => 'MM/DD/YYYY HH:MM am'
+            ),
+            'end_time' => array(
+              'type' => 'text',
+              'label' => 'Reservation End',
+              'id' => 'end_time',
+              'name' => 'end_time',
+              'required' => 'required',
+              'value' => '',
+              'placeholder' => 'MM/DD/YYYY HH:MM am'
+            ),
+            'equipment' => array(
+              'type' => 'select',
+              'label' => 'Equipment',
+              'id' => 'equipment',
+              'name' => 'equipment',
+              'required' => 'required',
+              'value' => 'Choose Equipment'
+            ),
+            'reserve' => array(
+              'type' => 'submit',
+              'label' => 'Reserve',
+              'id' => 'reserve',
+              'name' => 'reserve',
+              'value' => 'Reserve',
+              'required' => ''
+            ),
+            'cancel' => array(
+              'type' => 'button',
+              'label' => 'Cancel',
+              'id' => 'overlay-cancel',
+              'name' => 'overlay-cancel',
+              'value' => 'Cancel',
+              'required' => ''
+            )
+         )
+       );
+     }
+
+     public static function getFields(){
+       return array(
+         "event_fields" => array(
+           'title' => 'FieldtypeText',
+           'start_time' => 'FieldtypeDatetime',
+           'end_time' => 'FieldtypeDatetime',
+           'username' => 'FieldtypeText',
+           'equipment' => 'FieldtypeText',
+           'color' => 'FieldtypeText',
+           'email' => 'FieldtypeEmail'
+         ),
+         "equipment_fields" => array(
+           'title' => 'FieldtypeText',
+           'equipment_name' => 'FieldtypeText',
+           'color' => 'FieldtypeText',
+           'available' => 'FieldtypeCheckbox',
+           'equipment_info' => 'FieldtypeTextarea'
+         )
+       );
+     }
+
+     public function init(){
+       $this->data = wire('modules')->getModuleConfigData($this);
+       $this->inputfields = self::getInputfields();
+       $this->schedulerPageID = $this->data["scheduler_page_id"];
+       $this->response = array();
+     }
+
+     public function ready(){
+       $this->handleMakeReservation();
+       $this->handleCancelReservation();
+
+       $this->hookBuildForms();
+     }
+
+     protected function handleMakeReservation(){
+       $page = wire('page');
+       $post = wire('input')->post;
+       if($post->reserve){
+         $this->response = array();
+         if($this->validateReservation($post)){
+           $event = new Page();
+           $event->template = wire('templates')->get("name=event");
+           $event->title = wire('user')->name . " " . $post->equipment . " " . $post->start_time;
+           $event->start_time = $post->start_time;
+           $event->end_time = $post->end_time;
+           $event->equipment = $post->equipment;
+           $event->username = wire('user')->name;
+           $event->color = wire('pages')->get("title=$post->equipment")->color;
+           $event->email = wire('user')->email;
+           $event->parent = wire('pages')->get('name=events');
+           $event->save();
+           $this->response[] = "<p class='message'>Reservation Successful";
+         } else {
+          //  Don't do anything, validateReservation handles the response here.
+         }
+       }
+     }
+
+     protected function handleCancelReservation(){
+       $page = wire('page');
+       $post = wire('input')->post;
+       if($post->cancel){
+         $this->response = array();
+         if($this->validateCancellation($post)){
+           wire('pages')->delete(wire('pages')->get($post->id), true);
+           $this->response[] = "<p class='message'>Reservation Cancelled</p>";
+         } else {
+          //  validateCancellation handles error messages
+         }
+       }
+     }
+
+     protected function validateReservation($post){
+       $valid = true;
+       $start_time = $post->start_time;
+       $end_time = $post->end_time;
+       $equipment = $post->equipment;
+       $startdate = date_create();
+       date_timestamp_set($startdate, intval($start_time));
+       $enddate = date_create();
+       date_timestamp_set($enddate, intval($end_time));
+       $valid = validateFormat($startdate, $enddate);
+       $startTS = date_timestamp_get($startdate);
+       $endTS = date_timestamp_get($enddate);
+
+       // Reservation Rules
+       $valid = validateAdvanceTime($startTS);
+       $valid = validateDuration($start_time, $end_time);
+       $valid = validateEventOverlap($equipment, $start_time, $end_time);
+       $valid = validateAccumulatedTime($startTS, $endTS);
+
+       return $valid;
+     }
+
+     protected function validateCancellation($post){
+       $valid = true;
+       $event = wire('pages')->get("id=$post->id, template=event");
+       $start_time = $event->start_time;
+       $startdate = date_create();
+       date_timestamp_set($startdate, intval($start_time));
+       $startTS = date_timestamp_get($startdate);
+       $valid = validateAdvanceTime($startTS);
+       return $valid;
+     }
+
+     protected function validateEventOverlap ($equipment, $start, $end) {
+       $events = wire('pages')->find("template=event");
+       foreach ($events as $event) {
+         if($event->start_time){
+           $EstartTS = date_timestamp_get(date_create($event->start_time));
+           $EendTS = date_timestamp_get(date_create($event->end_time));
+
+           if($event->equipment == $equipment){
+             if($startTS >= $EstartTS && $startTS <= $EendTS){
+               $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
+               return false;
+             } else if($endTS >= $EstartTS && $endTS <= $EendTS){
+               $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
+               return false;
+             } else if($startTS <= $EstartTS && $endTS >= $EendTS){
+               $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
+               return false;
+             }
+           }
+         }
+       }
+       return true;
+     }
+
+    protected function validateAccumulatedTime ($startTS, $endTS) {
+       $data = $this->data;
+       $user_accumulated_time = 0;
+       $events = wire('pages')->find("template=event");
+       foreach ($events as $event) {
+         if($event->start_time){
+           $EstartTS = date_timestamp_get(date_create($event->start_time));
+           $EendTS = date_timestamp_get(date_create($event->end_time));
+
+           if($event->username == wire("user")->name &&
+             (strtotime("last Sunday", $startTS) < $EstartTS) &&
+             ($EstartTS < strtotime("next Sunday", $startTS))) {
+             //if the event being considered matches the current user AND
+             //that event is in the same week as the new event
+             $user_accumulated_time += ($EendTS - $EstartTS); //add duration to accumulated time
+           }
+         }
+       }
+       $h = $data['allowed_hours_per_week'];
+       $hpw = $h * 60 * 60; //time per week in seconds
+       if($user_accumulated_time + ($endTS - $startTS) > $hpw){
+         $this->response[] = "<p class='error'>You may only reserve up to {$h} hours per week.</p>";
+         return false;
+       }
+       return true;
+     }
+
+    protected function validateDuration ($start, $end) {
+      $data = $this->data;
+      $dur = $end - $start;
+      $minDurH = $data['min_reservation_time'];
+      $maxDurH = $data['max_reservation_time'];
+      $minDur = $minDurH*60*60;
+      $maxDur = $maxDurH*60*60;
+      if(!($dur >= $minDur) && ($dur <= $maxDur)){
+        $this->response[] = "<p class='error'>Reservations must be at least {$minDurH} hour(s) and no greater than {$maxDurH} hours in length.</p>";
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function validateFormat ($start, $end){
+      $data = $this->data;
+      // Check for invalid formatting on input strings //
+      if (!$start || !$end) {
+          $this->response[] = "<p class='error'>Invalid Date/Time format.</p>";
+          return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function validateAdvanceTime ($startTS){
+      $data = $this->data;
+      $thresholdH = $data['reservation_buffer'];
+      $threshold = $thresholdH*60*60; //convert from hours to seconds
+      $t = $startTS - $threshold;
+      if($t < date_timestamp_get(date_create("now"))){
+        $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function validateCancellationBuffer($startTS){
+      $data = $this->data;
+      $thresholdH = $data['cancellation_buffer'];
+      $threshold = $thresholdH*60*60; //convert from hours to seconds
+      $t = $startTS - $threshold;
+      if($t < date_timestamp_get(date_create("now"))){
+        $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
+        return false;
+      } else {
+        return true;
+      }
+    }
+
+    protected function hookBuildForms(){
+      $page = wire('page');
+      if($page->id == $this->schedulerPageID){
+        $this->addHookAfter('TemplateFile::render', $this, 'hookSchedulerForm');
+      }
+    }
+
+    protected function hookSchedulerForm(HookEvent $event){
+      $page = wire('page');
+      $form = "";
+      foreach ($this->response as $msg) {
+        $form.=$msg;
+      }
+      $form.="<div id='calendar'></div>";
+      $form.="<div id='overlay'><div><form id='reserve' method='post' action='./' enctype='multipart/form-data'>";
+      foreach ($this->inputfields['reservation_form'] as $key => $attrs) {
+        $form.="<p><label for='".$attrs['id']."'>".$attrs['label']."</label></p>";
+
+        if($attrs['name'] != "equipment"){
+          $form.="<p><input type='".$attrs['type']."' name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required']."></p>";
+        } else {
+          $form.="<p><select name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required'].">";
+          $options = wire('pages')->find('template=equipment, available=1');
+          foreach ($options  as $optkey => $optpage) {
+            $form.="<option value='".$optpage->name."'>".$optpage->title."</option>";
+          }
+          $form.="</select></p>";
+        }
+      }
+      $modulesUrl = wire('config')->urls->siteModules;
+      $form.="</form></div></div><div id='overlay-bg'></div>";
+      $form.="<script type='text/javascript' src='{$modulesUrl}Scheduler/Scheduler.js'></script>";
+      $prepend = "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
+      $prepend.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
+      $prepend.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/moment.min.js'></script>";
+      $prepend.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/fullcalendar.min.js'></script>";
+      $event->return = $prepend.str_replace("[schedule]", $form, $event->return);
+    }
+
+    private function deletePagesByTemplate($name){
+      $pages = $this->wire('pages')->find("template=$name, include=all, check_access=0");
+        foreach ($pages as $key => $p) {
+          $this->message("Page:" . $key . " => " . $p);
+          $this->message("delete page: " . $p->name);
+          $this->wire('pages')->delete($p, true);
+        }
+    }
+
+    /**
+    *
+    */
+
+    private function deleteTemplateByName($name){
+        $this->message("Template:" . $name);
+        $template = wire('templates')->get($name);
+        $fg = wire('fieldgroups')->get($name);
+        if($template->id){
+          $this->message("delete template: " . $template->name);
+          $this->wire("templates")->delete($template);
+
+        }
+        if($fg->id){
+          $this->message("delete fieldgroup: " . $fg->name);
+          $this->wire("fieldgroups")->delete($fg);
+        }
+    }
+
+    /**
+    *
+    */
+
+    private function deleteFields($fields){
+      foreach($fields as $key => $f){
+        $this->message("Field:" . $key . " => " . $f);
+        $field = $this->wire('fields')->get($key);
+        if($field->id && !strcmp($field->tags, "scheduler" && $field->numFieldgroups > 0)) {
+          $this->message("delete field: " . $field->name);
+          $this->wire('fields')->delete($field);
+        }
+      }
+    }
+
+    /**
+    *
+    */
+
+    private function deletePageByName($name){
+      $this->message("page name: " . $name);
+      $page = $this->wire('pages')->get("name=$name, include=all, check_access=0");
+      if($page->id){
+        $this->message("delete page: " . $page->name);
+        $this->wire('pages')->delete($page, true);
+      }
+    }
+
+    /**
+    *
+    */
+
+    private function deletePagesByProcess($prarray){
+      foreach ($prarray as $pname) {
+        $this->message("process page: " . $pname);
+        $id = wire('modules')->getModuleID($pname);
+        $this->message("Module ID: $id");
+        if($id){
+            $ppgs = wire("pages")->find("process=$id, include=all, check_access=0");
+            foreach ($ppgs as $key => $page) {
+                $this->message("delete process page: " . $page->name);
+                $this->wire("pages")->delete($page, true);
+            }
+        }
+
+      }
+    }
+
+    /**
+    *
+    */
+
+    private function getTemplate($fieldsArray, $type){
+      $t = $this->templates->get("name=".$type);
+      if(!$t->id){
+          $t = new Template();
+          $t->name = $type;
+          $t->tags = "scheduler";
+          $t->noChildren = 0;
+          $t->noParents = 0;
+          $t->fieldgroup = $this->getFieldgroup($fieldsArray, $type);
+          $t->save();
+      }
+      return $t;
+    }
+
+    /**
+    *
+    */
+
+    private function getFieldgroup($fieldsArray, $type){
+      $fg = $this->fieldgroups->get("name=".$type);
+      if(!$fg->id){
+          $fg = new Fieldgroup();
+          $fg->name = $type;
+          foreach ($fieldsArray as $name => $kind) {
+              $fg->append($this->getField($name, $kind));
+          }
+          $fg->save();
+      }
+
+      return $fg;
+    }
+
+    /**
+    *
+    */
+
+    private function getProcessListPage(){
+      $p = $this->wire('pages')->get("name=scheduler");
+      if(!$p->id){
+        $p = new Page();
+        $p->template = "admin";
+        $p->name = "scheduler";
+        $p->title = "Scheduler";
+        $p->process = $this->wire('modules')->get('ProcessList');
+        $p->parent = $this->wire('pages')->get($this->wire('config')->adminRootPageID);
+        $p->save();
+      }
+      return $p->id;
+    }
+
+    private function getFrontendPage($name, $title, $parent, $body){
+      $p = $this->wire('pages')->get("name=$name");
+      if(!$p->id){
+        $p = new Page();
+        $p->template = "basic-page"; //user will likely want to change this to something else
+        $p->name = $name;
+        $p->title = $title;
+        $p->parent = $this->wire('pages')->get($parent);
+        $p->body = $body;
+        $p->save();
+      }
+      return $p;
+    }
+
+    /**
+    *
+    */
+
+    private function getField($name, $type){
+      $f = $this->fields->get("name=$name");
+      if(!$f->id){
+          $f = new Field();
+          $f->name = $name;
+          $f->type = $type;
+          if(!strcmp($type, "FieldtypeFile")){
+            $f->extensions = str_replace(",", " ", self::getDefaultConfig()["allowed_filetypes"]["value"]);
+            $f->maxFiles = 1;
+          }
+          if(!strcmp($type, "FieldtypePage")){
+            // TODO: custom configuration for page fieldtype?
+            $f->findPagesSelector = 'template=item, check_access=0, include=all';
+            $f->template_id = wire('templates')->get("name=item")->id;
+            $f->inputfield = "InputfieldSelect";
+          }
+          $f->label = ucwords(str_replace("_", " ", $name));
+          $f->tags = "scheduler";
+          $f->save();
+      }
+      return $f;
+    }
+
+
+    protected function flattenConfig($array){
+      // returns an array that has just the key,value relations of the config arrays
+      // removes the types and labels
+      $out = array();
+      foreach ($array as $key => $value) {
+        $out[$key] = $value['value'];
+      }
+      return $out;
+    }
+
+    public function install(){
+      $defaults = self::getDefaultConfig();
+      $schedulerPage = $this->getFrontendPage("schedule", "Schedule", "/", "[schedule]");
+      $fields = self::getFields();
+      $eventTemplate = $this->getTemplate($fields['event_fields'], 'event');
+      $equipmentTemplate = $this->getTemplate($fields['equipment_fields'], 'equipment');
+      $listPage = $this->getProcessListPage();
+      $defaults = $this->flattenConfig($defaults);
+      $defaults['scheduler_page_id'] = $schedulerPage->id;
+      wire('modules')->saveModuleConfigData($this, $defaults);
+    }
+
+    public function ___uninstall() {
+      $fields = self::getFields();
+      $this->deletePagesByTemplate("event");
+      $this->deletePagesByTemplate("equipment");
+      $this->deleteTemplateByName("event");
+      $this->deleteTemplateByName("equipment");
+      $this->deleteFields($fields['event_fields']);
+      $this->deleteFields($fields['equipment_fields']);
+      $this->deletePageByName("scheduler");
+      $this->deletePageByName("schedule");
+      $this->deletePagesByProcess(array("ProcessEvent", "ProcessEquipment"));
+    }
+
+    /**
+    *
+    */
+
+    public static function getModuleConfigInputFields(array $data) {
+      $inputfields = new InputFieldWrapper();
+      $defaults = self::getDefaultConfig();
+
+      foreach ($defaults as $key => $value) {
+          $field = wire('modules')->get($value['type']);
+          $field->name = $key;
+          $field->label = $value['label'];
+          if(isset($data[$key])){
+            $field->value = $data[$key];
+          } else {
+            $field->value = $value['value'];
+          }
+          $inputfields->add($field);
+      }
+      return $inputfields;
+    }
+}
+
+
+?>

@@ -7,7 +7,7 @@
  *
  * Thomas Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
- * 
+ *
  * http://fablab.arts.ufl.edu
  * https://github.com/UF-Asq-Fab-Lab
  *
@@ -19,13 +19,14 @@ class ProcessEquipment extends ProcessPageType {
   static public function getModuleInfo() {
     return array(
       'title' => 'ProcessEquipment', // getModuleInfo title
-      'version' => 100, 
+      'version' => 100,
       'summary' => 'Manage equipment', // getModuleInfo summary
-      'permanent' => false, 
+      'permanent' => false,
       'permission' => 'schedule-admin',
-      'icon' => 'th', 
+      'requires' => array('Scheduler>=1.0.0'),
+      'icon' => 'th',
       'useNavJSON' => true,
-    ); 
+    );
   }
 
   protected $lister = null;
@@ -65,17 +66,17 @@ class ProcessEquipment extends ProcessPageType {
     return $lister->execute();
   }
 
-  public function executeConfig() { 
-    return $this->getLister()->executeConfig(); 
+  public function executeConfig() {
+    return $this->getLister()->executeConfig();
   }
-  public function executeViewport() { 
-    return $this->getLister()->executeViewport(); 
+  public function executeViewport() {
+    return $this->getLister()->executeViewport();
   }
-  public function executeReset() { 
-    return $this->getLister()->executeReset(); 
+  public function executeReset() {
+    return $this->getLister()->executeReset();
   }
-  public function executeActions() { 
-    return $this->getLister()->executeActions(); 
+  public function executeActions() {
+    return $this->getLister()->executeActions();
   }
   public function ___executeEdit() {
     $this->addHookAfter('ProcessPageEdit::buildForm', $this, 'hookBuildForm');
@@ -91,20 +92,32 @@ class ProcessEquipment extends ProcessPageType {
     }
   }
 
+  public function ___install(){
+    $parent = $this->wire('pages')->get("name=scheduler");
+    $p = new Page();
+    $p->template = "admin";
+    $p->name = "equipment";
+    $p->title = "Equipment";
+    $p->process = $this;
+    $p->parent = $parent;
+    $p->save();
+    parent::___install();
+  }
+
   public function ___executeNavJSON(array $options = array()) {
     $equipmentPages = $this->wire('pages')->find("template=equipment");
     $parentID = $this->page->id;
-    
+
     // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
     $equipmentArray = array();
     foreach($equipmentPages as $eqp) {
       $equipmentArray[] = $eqp;
     }
-    
+
     $options['items'] = $equipmentArray;
     $options['itemLabel'] = 'name';
     $options['add'] = "add/?parent_id=".$parentID;
-    
+
     return parent::___executeNavJSON($options);
   }
 

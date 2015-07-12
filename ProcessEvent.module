@@ -7,7 +7,7 @@
  *
  * Thomas Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
- * 
+ *
  * http://fablab.arts.ufl.edu
  * https://github.com/UF-Asq-Fab-Lab
  *
@@ -18,14 +18,15 @@ class ProcessEvent extends ProcessPageType {
   //Ryan Cramer's ProcessUser module.
   static public function getModuleInfo() {
     return array(
-      'title' => 'ProcessEvents', // getModuleInfo title
-      'version' => 100, 
+      'title' => 'ProcessEvent', // getModuleInfo title
+      'version' => 100,
       'summary' => 'Manage schedule events', // getModuleInfo summary
-      'permanent' => false, 
+      'permanent' => false,
       'permission' => 'schedule-admin',
-      'icon' => 'calendar-o', 
+      'requires' => array('Scheduler>=1.0.0'),
+      'icon' => 'calendar-o',
       'useNavJSON' => true,
-      ); 
+      );
   }
 
   protected $lister = null;
@@ -97,20 +98,32 @@ class ProcessEvent extends ProcessPageType {
     }
   }
 
+  public function ___install(){
+    $parent = $this->wire('pages')->get("name=scheduler");
+    $p = new Page();
+    $p->template = "admin";
+    $p->name = "events";
+    $p->title = "Events";
+    $p->process = $this;
+    $p->parent = $parent;
+    $p->save();
+    parent::___install();
+  }
+
   public function ___executeNavJSON(array $options = array()) {
     $eventPages = $this->wire('pages')->find("template=event");
     $parentID = $this->page->id;
-    
+
     // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
     $eventArray = array();
     foreach($eventPages as $ep) {
       $eventArray[] = $ep;
     }
-    
+
     $options['items'] = $eventArray;
     $options['itemLabel'] = 'name';
     $options['add'] = "add/?parent_id=".$parentID;
-    
+
     return parent::___executeNavJSON($options);
   }
 

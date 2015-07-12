@@ -1,0 +1,24 @@
+#overlay{
+  position: fixed;
+  width:40%;
+  left:30%;
+  top:30%;
+  visibility: hidden;
+  z-index: 999;
+  background-color: #fff;
+  padding: 25px;
+  border: solid;
+  border-radius: 2px;
+  border-color: #ddd;
+}
+
+#overlay-bg{
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  left:0px;
+  top:0px;
+  background-color: rgba(0,0,0,0.2);
+  visibility: hidden;
+  z-index: 998;
+}
