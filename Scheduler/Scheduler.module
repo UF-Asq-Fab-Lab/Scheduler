@@ -152,10 +152,12 @@
      }
 
      public function ready(){
-       $this->handleMakeReservation();
-       $this->handleCancelReservation();
-
-       $this->hookBuildForms();
+       if(!wire('config')->ajax){
+         $this->handleMakeReservation();
+         $this->handleCancelReservation();
+         $this->hookBuildForms();
+       }
+       $this->handleGetAjax();
      }
 
      protected function handleMakeReservation(){
@@ -194,6 +196,57 @@
           //  validateCancellation handles error messages
          }
        }
+     }
+
+     protected function handleGetAjax(){
+       if(wire('config')->ajax && wire('input')->get->events){
+         $this->addHookBefore('TemplateFile::render', $this, 'hookGetEvents');
+       }
+       if(wire('config')->ajax && wire('input')->get->config){
+         $this->addHookBefore('TemplateFile::render', $this, 'hookGetConfig');
+       }
+     }
+
+     protected function hookGetEvents(HookEvent $event){
+       $start = wire('input')->get->start;
+       $end = wire('input')->get->end;
+       $eventsJSON = $this->getEventsJSON($start, $end);
+       $event->replace = true;
+       $event->return = $eventsJSON;
+      //  $event->return = '[{"start" : "2015-07-13T12:00:00", "end" : "2015-07-13T18:00:00", "title" : "test event", "color" : "#F00"}]';
+     }
+
+     protected function hookGetConfig(HookEvent $event){
+       $configJSON = $this->getConfigJSON();
+       $event->replace = true;
+       $event->return = $configJSON;
+     }
+
+     protected function getEventsJSON($start, $end){
+       $start_timestamp = strtotime($start);
+       $end_timestamp = strtotime($end);
+       $json = array(
+         'events' => array()
+       );
+       $selector = "template=event, start_time>=$start_timestamp, ";
+       $selector.="end_time<=$end_timestamp, check_access=0, include=all";
+       $eventPages = wire('pages')->find($selector);
+       foreach ($eventPages as $key => $page) {
+         $json['events'][] = array ('title' => $page->title,
+                                    'start' => $page->start_time,
+                                    'end' => $page->end_time,
+                                    'color' => $page->color);
+       }
+       $jsonStr = json_encode($json['events']);
+       return $jsonStr;
+     }
+
+     protected function getConfigJSON(){
+       $json = array(
+         'config' => wire('modules')->getModuleConfigData($this)
+       );
+       $jsonStr = json_encode($json['config']);
+       return $jsonStr;
      }
 
      protected function validateReservation($post){
@@ -342,33 +395,36 @@
     protected function hookSchedulerForm(HookEvent $event){
       $page = wire('page');
       $form = "";
+      $append = "";
       foreach ($this->response as $msg) {
         $form.=$msg;
       }
       $form.="<div id='calendar'></div>";
-      $form.="<div id='overlay'><div><form id='reserve' method='post' action='./' enctype='multipart/form-data'>";
+      $append.="<div id='overlay'><div><form id='reserve' method='post' action='./' enctype='multipart/form-data'>";
       foreach ($this->inputfields['reservation_form'] as $key => $attrs) {
-        $form.="<p><label for='".$attrs['id']."'>".$attrs['label']."</label></p>";
-
+        if($attrs['type'] != 'button' && $attrs['type'] != 'submit'){
+          $append.="<label for='".$attrs['id']."'>".$attrs['label']."</label>";
+        }
         if($attrs['name'] != "equipment"){
-          $form.="<p><input type='".$attrs['type']."' name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required']."></p>";
+          $append.="<input type='".$attrs['type']."' name='".$attrs['name']."' id='".$attrs['id']."' value='".$attrs['value']."' ".$attrs['required']."></input>";
         } else {
-          $form.="<p><select name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required'].">";
+          $append.="<select name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required'].">";
           $options = wire('pages')->find('template=equipment, available=1');
           foreach ($options  as $optkey => $optpage) {
-            $form.="<option value='".$optpage->name."'>".$optpage->title."</option>";
+            $append.="<option value='".$optpage->name."'>".$optpage->title."</option>";
           }
-          $form.="</select></p>";
+          $append.="</select>";
         }
       }
       $modulesUrl = wire('config')->urls->siteModules;
-      $form.="</form></div></div><div id='overlay-bg'></div>";
-      $form.="<script type='text/javascript' src='{$modulesUrl}Scheduler/Scheduler.js'></script>";
-      $prepend = "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
-      $prepend.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
-      $prepend.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/moment.min.js'></script>";
-      $prepend.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/fullcalendar.min.js'></script>";
-      $event->return = $prepend.str_replace("[schedule]", $form, $event->return);
+      $append.="</form></div></div><div id='overlay-bg'></div>";
+      $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
+      $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
+      $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/moment.min.js'></script>";
+      $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/fullcalendar.min.js'></script>";
+      $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/Scheduler.js'></script>";
+
+      $event->return = str_replace("[schedule]", $form, $event->return).$append;
     }
 
     private function deletePagesByTemplate($name){
