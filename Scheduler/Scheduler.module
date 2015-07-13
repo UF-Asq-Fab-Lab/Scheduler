@@ -30,7 +30,7 @@
        'autoload' => true,
        'singular' => true,
        'permanent' => false,
-       'installs' => array("ProcessEvent, ProcessEquipment")
+       'installs' => array("ProcessEvent", "ProcessEquipment")
      );
    }
 
@@ -127,8 +127,8 @@
        return array(
          "event_fields" => array(
            'title' => 'FieldtypeText',
-           'start_time' => 'FieldtypeDatetime',
-           'end_time' => 'FieldtypeDatetime',
+           'start_time' => 'FieldtypeText',
+           'end_time' => 'FieldtypeText',
            'username' => 'FieldtypeText',
            'equipment' => 'FieldtypeText',
            'color' => 'FieldtypeText',
@@ -152,28 +152,31 @@
      }
 
      public function ready(){
-       if(!wire('config')->ajax){
-         $this->handleMakeReservation();
-         $this->handleCancelReservation();
-         $this->hookBuildForms();
+       if(wire('input')->post){
+         if(!wire('config')->ajax){
+           $this->handleMakeReservation(wire('input')->post);
+           $this->handleCancelReservation(wire('input')->post);
+           $this->hookBuildForms();
+         }
        }
        $this->handleGetAjax();
      }
 
-     protected function handleMakeReservation(){
-       $page = wire('page');
-       $post = wire('input')->post;
+     protected function handleMakeReservation($post){
        if($post->reserve){
+         $page = wire('page');
+         $start_time_iso = date('c', $post->start_time_unix);
+         $end_time_iso = date('c', $post->end_time_unix);
          $this->response = array();
          if($this->validateReservation($post)){
            $event = new Page();
            $event->template = wire('templates')->get("name=event");
            $event->title = wire('user')->name . " " . $post->equipment . " " . $post->start_time;
-           $event->start_time = $post->start_time;
-           $event->end_time = $post->end_time;
+           $event->start_time = $start_time_iso;
+           $event->end_time = $end_time_iso;
            $event->equipment = $post->equipment;
            $event->username = wire('user')->name;
-           $event->color = wire('pages')->get("title=$post->equipment")->color;
+           $event->color = wire('pages')->get("name=$post->equipment, template=equipment")->color;
            $event->email = wire('user')->email;
            $event->parent = wire('pages')->get('name=events');
            $event->save();
@@ -184,9 +187,8 @@
        }
      }
 
-     protected function handleCancelReservation(){
+     protected function handleCancelReservation($post){
        $page = wire('page');
-       $post = wire('input')->post;
        if($post->cancel){
          $this->response = array();
          if($this->validateCancellation($post)){
@@ -228,8 +230,9 @@
        $json = array(
          'events' => array()
        );
-       $selector = "template=event, start_time>=$start_timestamp, ";
-       $selector.="end_time<=$end_timestamp, check_access=0, include=all";
+      //  $selector = "template=event, start_time>=$start_timestamp, ";
+      //  $selector.="end_time<=$end_timestamp, check_access=0, include=all";
+      $selector = "template=event, check_access=0, include=all";
        $eventPages = wire('pages')->find($selector);
        foreach ($eventPages as $key => $page) {
          $json['events'][] = array ('title' => $page->title,
@@ -250,25 +253,19 @@
      }
 
      protected function validateReservation($post){
-       $valid = true;
+       $valid = array();
        $start_time = $post->start_time;
        $end_time = $post->end_time;
+       $start_time_unix = $post->start_time_unix;
+       $end_time_unix = $post->end_time_unix;
        $equipment = $post->equipment;
-       $startdate = date_create();
-       date_timestamp_set($startdate, intval($start_time));
-       $enddate = date_create();
-       date_timestamp_set($enddate, intval($end_time));
-       $valid = validateFormat($startdate, $enddate);
-       $startTS = date_timestamp_get($startdate);
-       $endTS = date_timestamp_get($enddate);
-
        // Reservation Rules
-       $valid = validateAdvanceTime($startTS);
-       $valid = validateDuration($start_time, $end_time);
-       $valid = validateEventOverlap($equipment, $start_time, $end_time);
-       $valid = validateAccumulatedTime($startTS, $endTS);
-
-       return $valid;
+       $valid[] = $this->validateAdvanceTime($start_time_unix);
+       $valid[] = $this->validateDuration($start_time_unix, $end_time_unix);
+       $valid[] = $this->validateEventOverlap($equipment, $start_time_unix, $end_time_unix);
+       $valid[] = $this->validateAccumulatedTime($start_time_unix, $end_time_unix);
+       //  check if valid has any false elements
+       return !in_array(false, $valid);
      }
 
      protected function validateCancellation($post){
@@ -278,7 +275,7 @@
        $startdate = date_create();
        date_timestamp_set($startdate, intval($start_time));
        $startTS = date_timestamp_get($startdate);
-       $valid = validateAdvanceTime($startTS);
+       $valid = $this->validateAdvanceTime($startTS);
        return $valid;
      }
 
@@ -286,17 +283,17 @@
        $events = wire('pages')->find("template=event");
        foreach ($events as $event) {
          if($event->start_time){
-           $EstartTS = date_timestamp_get(date_create($event->start_time));
-           $EendTS = date_timestamp_get(date_create($event->end_time));
+           $event_start = strtotime($event->start_time);
+           $event_end = strtotime($event->end_time);
 
            if($event->equipment == $equipment){
-             if($startTS >= $EstartTS && $startTS <= $EendTS){
+             if($start >= $event_start && $start <= $event_end){
                $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
                return false;
-             } else if($endTS >= $EstartTS && $endTS <= $EendTS){
+             } else if($end >= $event_start && $end <= $event_end){
                $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
                return false;
-             } else if($startTS <= $EstartTS && $endTS >= $EendTS){
+             } else if($start <= $event_start && $end >= $event_end){
                $this->response[] = "<p class='error'>Time overlaps with existing reservation for that equipment.</p>";
                return false;
              }
@@ -306,27 +303,27 @@
        return true;
      }
 
-    protected function validateAccumulatedTime ($startTS, $endTS) {
+    protected function validateAccumulatedTime ($start, $end) {
        $data = $this->data;
        $user_accumulated_time = 0;
        $events = wire('pages')->find("template=event");
        foreach ($events as $event) {
          if($event->start_time){
-           $EstartTS = date_timestamp_get(date_create($event->start_time));
-           $EendTS = date_timestamp_get(date_create($event->end_time));
+           $event_start = strtotime($event->start_time);
+           $event_end = strtotime($event->end_time);
 
            if($event->username == wire("user")->name &&
-             (strtotime("last Sunday", $startTS) < $EstartTS) &&
-             ($EstartTS < strtotime("next Sunday", $startTS))) {
+             (strtotime("last Sunday", $start) < $event_start) &&
+             ($event_start < strtotime("next Sunday", $start))) {
              //if the event being considered matches the current user AND
              //that event is in the same week as the new event
-             $user_accumulated_time += ($EendTS - $EstartTS); //add duration to accumulated time
+             $user_accumulated_time += ($event_end - $event_start); //add duration to accumulated time
            }
          }
        }
-       $h = $data['allowed_hours_per_week'];
+       $h = $data['max_hours_per_week'];
        $hpw = $h * 60 * 60; //time per week in seconds
-       if($user_accumulated_time + ($endTS - $startTS) > $hpw){
+       if($user_accumulated_time + ($end - $start) > $hpw){
          $this->response[] = "<p class='error'>You may only reserve up to {$h} hours per week.</p>";
          return false;
        }
@@ -340,7 +337,7 @@
       $maxDurH = $data['max_reservation_time'];
       $minDur = $minDurH*60*60;
       $maxDur = $maxDurH*60*60;
-      if(!($dur >= $minDur) && ($dur <= $maxDur)){
+      if(!($dur >= $minDur && $dur <= $maxDur) ){
         $this->response[] = "<p class='error'>Reservations must be at least {$minDurH} hour(s) and no greater than {$maxDurH} hours in length.</p>";
         return false;
       } else {
@@ -364,8 +361,10 @@
       $thresholdH = $data['reservation_buffer'];
       $threshold = $thresholdH*60*60; //convert from hours to seconds
       $t = $startTS - $threshold;
-      if($t < date_timestamp_get(date_create("now"))){
+      $n = date_timestamp_get(date_create("now"));
+      if($t < $n){
         $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
+        $this->response[] = "<p class='error'>threshold hours: {$thresholdH} startTS: {$startTS} difference: {$t} now: {$n} </p>";
         return false;
       } else {
         return true;
@@ -378,7 +377,7 @@
       $threshold = $thresholdH*60*60; //convert from hours to seconds
       $t = $startTS - $threshold;
       if($t < date_timestamp_get(date_create("now"))){
-        $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
+        $this->response[] = "<p class='error'>Cancellations must be made at least {$thresholdH} hours in advance.</p>";
         return false;
       } else {
         return true;
@@ -400,7 +399,7 @@
         $form.=$msg;
       }
       $form.="<div id='calendar'></div>";
-      $append.="<div id='overlay'><div><form id='reserve' method='post' action='./' enctype='multipart/form-data'>";
+      $append.="<div id='reserve-modal'><div><form id='reserve-form' method='post' action='./' enctype='multipart/form-data'>";
       foreach ($this->inputfields['reservation_form'] as $key => $attrs) {
         if($attrs['type'] != 'button' && $attrs['type'] != 'submit'){
           $append.="<label for='".$attrs['id']."'>".$attrs['label']."</label>";
@@ -409,7 +408,7 @@
           $append.="<input type='".$attrs['type']."' name='".$attrs['name']."' id='".$attrs['id']."' value='".$attrs['value']."' ".$attrs['required']."></input>";
         } else {
           $append.="<select name='".$attrs['name']."' id='".$attrs['id']."' ".$attrs['required'].">";
-          $options = wire('pages')->find('template=equipment, available=1');
+          $options = wire('pages')->find('template=equipment, available=1, check_access=0, include=all');
           foreach ($options  as $optkey => $optpage) {
             $append.="<option value='".$optpage->name."'>".$optpage->title."</option>";
           }
@@ -417,7 +416,13 @@
         }
       }
       $modulesUrl = wire('config')->urls->siteModules;
-      $append.="</form></div></div><div id='overlay-bg'></div>";
+      $append.="<input type='hidden' name='start_time_unix' id='start_time_unix'></input>";
+      $append.="<input type='hidden' name='end_time_unix' id='end_time_unix'></input>";
+      $append.="</form></div></div>";
+      $append.="<div id='cancel-modal'><div><table><tr><th>Title</th><th>Start</th><th>End</th></tr>";
+      $append.="<tr><td id='event-title-data'></td><td id='event-start-data'></td><td id='event-end-data'></td></tr>";
+      $append.="<input type='button' id='event-cancel' name='event-cancel'></button>";
+      $append.="<div id='modal-bg'></div>";
       $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
       $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
       $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/moment.min.js'></script>";
@@ -463,7 +468,7 @@
       foreach($fields as $key => $f){
         $this->message("Field:" . $key . " => " . $f);
         $field = $this->wire('fields')->get($key);
-        if($field->id && !strcmp($field->tags, "scheduler" && $field->numFieldgroups > 0)) {
+        if($field->id && !strcmp($field->tags, "scheduler") && !$field->numFieldgroups()) {
           $this->message("delete field: " . $field->name);
           $this->wire('fields')->delete($field);
         }

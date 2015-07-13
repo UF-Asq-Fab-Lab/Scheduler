@@ -2,17 +2,20 @@ var config = {scheduler_format: "M-D-YYYY h:mm a"};
 
 function overlay (start, end) {
   el = $("#overlay");
-  el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
+  el.css("visibility", function(){
+    return (el.css("visibility") == "visible") ? "hidden" : "visible"
+    });
   el = $("#overlay-bg");
-  el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
-  $('[name=start_time]').val(start.format(config.scheduler_format));
-  $('[name=end_time]').val(end.format(config.scheduler_format));
+  el.css("visibility", function(){
+    return (el.css("visibility") == "visible") ? "hidden" : "visible"
+    });
+  $("#start_time").val(start.format(config.scheduler_format));
+  $("#end_time").val(end.format(config.scheduler_format));
 };
 
 function reserve (event) {
-  $("#start_time").val(moment($("#start_time").val(), config.scheduler_format).unix());
-  $("#end_time").val(moment($("#end_time").val(), config.scheduler_format).unix());
-  //event.preventDefault();
+  $("#start_time_unix").val(moment($("#start_time").val(), config.scheduler_format).unix());
+  $("#end_time_unix").val(moment($("#end_time").val(), config.scheduler_format).unix());
 }
 
 function overlaycancel () {
@@ -33,7 +36,7 @@ $(document).ready(function() {
      // page is now ready, initialize the calendar...
     $("#overlay-cancel").click(overlaycancel);
 
-    $("#form-reserve").submit(reserve);
+    $("#reserve-form").submit(reserve);
 
     $('#calendar').fullCalendar({
         // put options and callbacks here
@@ -47,6 +50,9 @@ $(document).ready(function() {
       select: function(start, end){
           overlay(start, end.add(30, 'm'));
       },
+      eventClick : function(calEvent, jsEvent, view){
+          eventOverlay(calEvent);
+      }
       editable: false,
       events: {
         url: './',
