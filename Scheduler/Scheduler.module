@@ -41,10 +41,15 @@
         'value' => 0,
         'label' => 'Scheduler Page ID (should be filled automatically, but you may need to change it if you move the login page)',
          ),
-         "scheduler_format" => array(
+         "frontend_format" => array(
            'type' => 'InputfieldText',
            'value' => "M-D-YYYY h:mm a",
-           'label' => 'How should dates be stored and displayed? See: http://php.net/manual/en/datetime.formats.php'
+           'label' => 'How should dates/times be displayed to users? See: http://momentjs.com/docs/#/displaying/format/'
+         ),
+         "admin_format" => array(
+           'type' => 'InputfieldText',
+           'value' => 'n/j/Y g:i a',
+           'label' => 'How should dates/times be displayed to the admin? See: http://php.net/manual/en/datetime.formats.php'
          ),
          "max_hours_per_week" => array(
            'type' => 'InputfieldInteger',
@@ -604,14 +609,25 @@
     */
 
     private function getField($name, $type){
+      $defaults = $this->flattenConfig(self::getDefaultConfig());
       $f = $this->fields->get("name=$name");
       if(!$f->id){
           $f = new Field();
           $f->name = $name;
           $f->type = $type;
-          if(!strcmp($type, "FieldtypeFile")){
-            $f->extensions = str_replace(",", " ", self::getDefaultConfig()["allowed_filetypes"]["value"]);
-            $f->maxFiles = 1;
+          if(!strcmp($type, "FieldtypeDatetime")){
+            $formatArray = explode(" ", $defaults['admin_format']);
+            $dateformat = $formatArray[0];
+            $timeformat = $formatArray[1]." ".$formatArray[2];
+            $f->set('dateOutputFormat', $defaults['admin_format']);
+            $f->set('dateInputFormat', $dateformat);
+            $f->set('timeInputFormat', $timeformat);
+            $f->set('datepicker', 3);
+            // $inputf = $f->getInputfield(wire('page'), $f);
+            // $inputf->set('dateInputFormat', $dateformat);
+        		// $inputf->set('timeInputFormat', $timeformat);
+        		// $inputf->set('datepicker', 3);
+            // $inputf->save();
           }
           if(!strcmp($type, "FieldtypePage")){
             // TODO: custom configuration for page fieldtype?

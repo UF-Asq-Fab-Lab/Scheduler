@@ -1,4 +1,4 @@
-var config = {scheduler_format: "M-D-YYYY h:mm a"};
+var config = {frontend_format: "M-D-YYYY h:mm a"};
 
 function toggleModal (target) {
   $(target).toggle();
@@ -6,22 +6,22 @@ function toggleModal (target) {
 };
 
 function readyReserveModal(start, end){
-  $("#start_time").val(moment(start).format(config.scheduler_format));
-  $("#end_time").val(moment(end).format(config.scheduler_format));
+  $("#start_time").val(moment(start).format(config.frontend_format));
+  $("#end_time").val(moment(end).format(config.frontend_format));
 }
 
 function readyEventModal(event){
   console.log(event.title);
   $("#event-title-data").html(event.title);
-  $("#event-start-data").html(event.start.format(config.scheduler_format));
-  $("#event-end-data").html(event.end.format(config.scheduler_format));
+  $("#event-start-data").html(event.start.format(config.frontend_format));
+  $("#event-end-data").html(event.end.format(config.frontend_format));
   $("#event-id-data").html(event.id);
   $("#cancel_id").val(event.id);
 }
 
 function reserveEvent() {
-  $("#start_time_unix").val(moment($("#start_time").val(), config.scheduler_format).unix());
-  $("#end_time_unix").val(moment($("#end_time").val(), config.scheduler_format).unix());
+  $("#start_time_unix").val(moment($("#start_time").val(), config.frontend_format).unix());
+  $("#end_time_unix").val(moment($("#end_time").val(), config.frontend_format).unix());
 }
 
 function reloadCalendar () {
@@ -74,7 +74,7 @@ $(document).ready(function() {
             console.dir(e);
         },
       }, //events source
-      timeFormat : config.scheduler_format
+      timeFormat : config.frontend_format
     });
     // referesh background mesh now that the main div has content
     $("#main-mesh").remove();
