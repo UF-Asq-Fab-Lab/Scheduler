@@ -1,32 +1,31 @@
 var config = {scheduler_format: "M-D-YYYY h:mm a"};
 
-function overlay (start, end) {
-  el = $("#overlay");
-  el.css("visibility", function(){
-    return (el.css("visibility") == "visible") ? "hidden" : "visible"
-    });
-  el = $("#overlay-bg");
-  el.css("visibility", function(){
-    return (el.css("visibility") == "visible") ? "hidden" : "visible"
-    });
-  $("#start_time").val(start.format(config.scheduler_format));
-  $("#end_time").val(end.format(config.scheduler_format));
+function toggleModal (target) {
+  $(target).toggle();
+  $("#modal-bg").toggle();
 };
 
-function reserve (event) {
+function readyReserveModal(start, end){
+  $("#start_time").val(moment(start).format(config.scheduler_format));
+  $("#end_time").val(moment(end).format(config.scheduler_format));
+}
+
+function readyEventModal(event){
+  console.log(event.title);
+  $("#event-title-data").html(event.title);
+  $("#event-start-data").html(event.start.format(config.scheduler_format));
+  $("#event-end-data").html(event.end.format(config.scheduler_format));
+  $("#event-id-data").html(event.id);
+  $("#cancel_id").val(event.id);
+}
+
+function reserveEvent() {
   $("#start_time_unix").val(moment($("#start_time").val(), config.scheduler_format).unix());
   $("#end_time_unix").val(moment($("#end_time").val(), config.scheduler_format).unix());
 }
 
-function overlaycancel () {
-  el = $("#overlay");
-  el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
-  el = $("#overlay-bg");
-  el.css("visibility", function(){return (el.css("visibility") == "visible") ? "hidden" : "visible"});
-};
-
 function reloadCalendar () {
-    var interval = document.setInterval($('#calendar').fullCalendar('refetchEvents'), 5000);
+    $('#calendar').fullCalendar('refetchEvents');
 };
 
 $(document).ready(function() {
@@ -34,9 +33,17 @@ $(document).ready(function() {
     config = data;
   });
      // page is now ready, initialize the calendar...
-    $("#overlay-cancel").click(overlaycancel);
+    $("#reserve-cancel").click(function(){
+      toggleModal("#reserve-modal");
+    });
 
-    $("#reserve-form").submit(reserve);
+    $("#event-back").click(function(){
+      toggleModal("#event-modal");
+    });
+
+    $("#reserve-form").submit(function(){
+      reserveEvent();
+    });
 
     $('#calendar').fullCalendar({
         // put options and callbacks here
@@ -48,11 +55,13 @@ $(document).ready(function() {
       defaultView: 'agendaWeek',
       selectable: true,
       select: function(start, end){
-          overlay(start, end.add(30, 'm'));
+          toggleModal("#reserve-modal");
+          readyReserveModal(start, end.add(30, 'm'));
       },
       eventClick : function(calEvent, jsEvent, view){
-          eventOverlay(calEvent);
-      }
+          toggleModal("#event-modal");
+          readyEventModal(calEvent);
+      },
       editable: false,
       events: {
         url: './',
@@ -67,6 +76,7 @@ $(document).ready(function() {
       }, //events source
       timeFormat : config.scheduler_format
     });
+    // referesh background mesh now that the main div has content
     $("#main-mesh").remove();
     mainMesh = MeshGen("#main", 20);
     mainMesh.meshify();

@@ -111,11 +111,11 @@
               'value' => 'Reserve',
               'required' => ''
             ),
-            'cancel' => array(
+            'reserve-cancel' => array(
               'type' => 'button',
               'label' => 'Cancel',
-              'id' => 'overlay-cancel',
-              'name' => 'overlay-cancel',
+              'id' => 'reserve-cancel',
+              'name' => 'reserve-cancel',
               'value' => 'Cancel',
               'required' => ''
             )
@@ -127,8 +127,8 @@
        return array(
          "event_fields" => array(
            'title' => 'FieldtypeText',
-           'start_time' => 'FieldtypeText',
-           'end_time' => 'FieldtypeText',
+           'start_time' => 'FieldtypeDatetime',
+           'end_time' => 'FieldtypeDatetime',
            'username' => 'FieldtypeText',
            'equipment' => 'FieldtypeText',
            'color' => 'FieldtypeText',
@@ -174,6 +174,8 @@
            $event->title = wire('user')->name . " " . $post->equipment . " " . $post->start_time;
            $event->start_time = $start_time_iso;
            $event->end_time = $end_time_iso;
+          //  $event->start_time = $post->start_time_unix;
+          //  $event->end_time = $post->end_time_unix;
            $event->equipment = $post->equipment;
            $event->username = wire('user')->name;
            $event->color = wire('pages')->get("name=$post->equipment, template=equipment")->color;
@@ -189,10 +191,10 @@
 
      protected function handleCancelReservation($post){
        $page = wire('page');
-       if($post->cancel){
+       if($post->cancel_id){
          $this->response = array();
          if($this->validateCancellation($post)){
-           wire('pages')->delete(wire('pages')->get($post->id), true);
+           wire('pages')->delete(wire('pages')->get($post->cancel_id), true);
            $this->response[] = "<p class='message'>Reservation Cancelled</p>";
          } else {
           //  validateCancellation handles error messages
@@ -207,6 +209,11 @@
        if(wire('config')->ajax && wire('input')->get->config){
          $this->addHookBefore('TemplateFile::render', $this, 'hookGetConfig');
        }
+      //  if(wire('config')->ajax && wire('input')->post->cancel){
+      //    if(validateCancellation(wire('input')->post)){
+      //      $this->addHookBefore('TemplateFile::render', $this, 'hookPostCancel');
+      //    }
+      //  }
      }
 
      protected function hookGetEvents(HookEvent $event){
@@ -224,6 +231,10 @@
        $event->return = $configJSON;
      }
 
+    //  protected function hookPostCancel(HookEvent $event){
+     //
+    //  }
+
      protected function getEventsJSON($start, $end){
        $start_timestamp = strtotime($start);
        $end_timestamp = strtotime($end);
@@ -236,9 +247,10 @@
        $eventPages = wire('pages')->find($selector);
        foreach ($eventPages as $key => $page) {
          $json['events'][] = array ('title' => $page->title,
-                                    'start' => $page->start_time,
+                                    'start' =>$page->start_time,
                                     'end' => $page->end_time,
-                                    'color' => $page->color);
+                                    'color' => $page->color,
+                                    'id' => $page->id);
        }
        $jsonStr = json_encode($json['events']);
        return $jsonStr;
@@ -260,7 +272,7 @@
        $end_time_unix = $post->end_time_unix;
        $equipment = $post->equipment;
        // Reservation Rules
-       $valid[] = $this->validateAdvanceTime($start_time_unix);
+       $valid[] = $this->validateAdvanceTime("reservation", $start_time_unix);
        $valid[] = $this->validateDuration($start_time_unix, $end_time_unix);
        $valid[] = $this->validateEventOverlap($equipment, $start_time_unix, $end_time_unix);
        $valid[] = $this->validateAccumulatedTime($start_time_unix, $end_time_unix);
@@ -269,14 +281,22 @@
      }
 
      protected function validateCancellation($post){
-       $valid = true;
-       $event = wire('pages')->get("id=$post->id, template=event");
+       $valid = array();
+       $event = wire('pages')->get("id=$post->cancel_id, template=event");
        $start_time = $event->start_time;
-       $startdate = date_create();
-       date_timestamp_set($startdate, intval($start_time));
-       $startTS = date_timestamp_get($startdate);
-       $valid = $this->validateAdvanceTime($startTS);
-       return $valid;
+       $start_unix = strtotime($start_time);
+       $valid[] = $this->validateAdvanceTime("cancellation", $start_unix);
+       $valid[] = $this->validateCancelPermission($event);
+       return !in_array(false, $valid);
+     }
+
+     protected function validateCancelPermission($page){
+       if($page->username == wire('user')->name){
+         return true;
+       } else {
+         $this->response[] = "<p class='error'>You do not have permission to cancel this event!</p>";
+         return false;
+       }
      }
 
      protected function validateEventOverlap ($equipment, $start, $end) {
@@ -356,15 +376,15 @@
       }
     }
 
-    protected function validateAdvanceTime ($startTS){
+    protected function validateAdvanceTime ($type, $startTS){
       $data = $this->data;
-      $thresholdH = $data['reservation_buffer'];
+      $thresholdH = $data["{$type}_buffer"];
       $threshold = $thresholdH*60*60; //convert from hours to seconds
       $t = $startTS - $threshold;
       $n = date_timestamp_get(date_create("now"));
       if($t < $n){
-        $this->response[] = "<p class='error'>Reservations must be made at least {$thresholdH} hours in advance.</p>";
-        $this->response[] = "<p class='error'>threshold hours: {$thresholdH} startTS: {$startTS} difference: {$t} now: {$n} </p>";
+        $type = ucwords($type)."s";
+        $this->response[] = "<p class='error'>{$type} must be made at least {$thresholdH} hour(s) in advance.</p>";
         return false;
       } else {
         return true;
@@ -419,9 +439,12 @@
       $append.="<input type='hidden' name='start_time_unix' id='start_time_unix'></input>";
       $append.="<input type='hidden' name='end_time_unix' id='end_time_unix'></input>";
       $append.="</form></div></div>";
-      $append.="<div id='cancel-modal'><div><table><tr><th>Title</th><th>Start</th><th>End</th></tr>";
-      $append.="<tr><td id='event-title-data'></td><td id='event-start-data'></td><td id='event-end-data'></td></tr>";
-      $append.="<input type='button' id='event-cancel' name='event-cancel'></button>";
+      $append.="<div id='event-modal'><div><table><tr><th>Title</th><th>Start</th><th>End</th><th>Id</th></tr>";
+      $append.="<tr><td id='event-title-data'></td><td id='event-start-data'></td><td id='event-end-data'></td><td id='event-id-data'></td></tr>";
+      $append.="</table><form id='event-cancel-form' method='post' action='./' enctype='multipart/form-data'>";
+      $append.="<input type='hidden' id='cancel_id' name='cancel_id'></input>";
+      $append.="<input type='submit' id='event-cancel' name='event-cancel' value='Cancel Event'></button>";
+      $append.="<input type='button' id='event-back' name='event-back' value='Back'></button></div></div></form>";
       $append.="<div id='modal-bg'></div>";
       $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
       $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
