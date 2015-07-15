@@ -43,7 +43,7 @@
          ),
          "frontend_format" => array(
            'type' => 'InputfieldText',
-           'value' => "M-D-YYYY h:mm a",
+           'value' => "M/D/YYYY h:mm a",
            'label' => 'How should dates/times be displayed to users? See: http://momentjs.com/docs/#/displaying/format/'
          ),
          "admin_format" => array(
@@ -82,18 +82,36 @@
      public static function getInputfields(){
        return array(
          'reservation_form' => array (
+            'start_date' => array(
+              'type' => 'text',
+              'label' => 'Reservation Start Date',
+              'id' => 'start_date',
+              'name' => 'start_date',
+              'required' => 'required',
+              'value' => '',
+              'placeholder' => 'MM/DD/YYYY'
+            ),
             'start_time' => array(
               'type' => 'text',
-              'label' => 'Reservation Start',
+              'label' => 'Reservation Start Time',
               'id' => 'start_time',
               'name' => 'start_time',
               'required' => 'required',
               'value' => '',
-              'placeholder' => 'MM/DD/YYYY HH:MM am'
+              'placeholder' => 'HH:MM am'
+            ),
+            'end_date' => array(
+              'type' => 'text',
+              'label' => 'Reservate End Date',
+              'id' => 'end_date',
+              'name' => 'end_date',
+              'required' => 'required',
+              'value' => '',
+              'placeholder' => 'MM/DD/YYYY'
             ),
             'end_time' => array(
               'type' => 'text',
-              'label' => 'Reservation End',
+              'label' => 'Reservation End Time',
               'id' => 'end_time',
               'name' => 'end_time',
               'required' => 'required',
@@ -452,9 +470,11 @@
       $append.="<input type='button' id='event-back' name='event-back' value='Back'></button></div></div></form>";
       $append.="<div id='modal-bg'></div>";
       $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/fullcalendar.min.css' />";
+      $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/lib/jquery.timepicker.css' />";
       $append.= "<link rel='stylesheet' href='{$modulesUrl}Scheduler/Scheduler.css' />";
       $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/moment.min.js'></script>";
       $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/fullcalendar.min.js'></script>";
+      $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/lib/jquery.timepicker.min.js'></script>";
       $append.= "<script type='text/javascript' src='{$modulesUrl}Scheduler/Scheduler.js'></script>";
 
       $event->return = str_replace("[schedule]", $form, $event->return).$append;

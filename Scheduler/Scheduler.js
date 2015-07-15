@@ -1,4 +1,4 @@
-var config = {frontend_format: "M-D-YYYY h:mm a"};
+var config = {frontend_format: "M/D/YYYY h:mm a"};
 
 function toggleModal (target) {
   $(target).toggle();
@@ -6,8 +6,13 @@ function toggleModal (target) {
 };
 
 function readyReserveModal(start, end){
-  $("#start_time").val(moment(start).format(config.frontend_format));
-  $("#end_time").val(moment(end).format(config.frontend_format));
+  var formatArray = config.frontend_format.split(' ');
+  var format_time = [formatArray[1], formatArray[2]].join(' ');
+  var format_date = formatArray[0];
+  $("#start_time").val(moment(start).format(format_time));
+  $("#start_date").val(moment(start).format(format_date));
+  $("#end_time").val(moment(end).format(format_time));
+  $("#end_date").val(moment(end).format(format_date));
 }
 
 function readyEventModal(event){
@@ -19,9 +24,14 @@ function readyEventModal(event){
   $("#cancel_id").val(event.id);
 }
 
-function reserveEvent() {
-  $("#start_time_unix").val(moment($("#start_time").val(), config.frontend_format).unix());
-  $("#end_time_unix").val(moment($("#end_time").val(), config.frontend_format).unix());
+function reserveEvent(event) {
+  // event.preventDefault();
+  var start_datetime = [$("#start_date").val(), $("#start_time").val()].join(' ');
+  console.log(start_datetime);
+  var end_datetime = [$("#end_date").val(), $("#end_time").val()].join(' ');
+  console.log(end_datetime);
+  $("#start_time_unix").val(moment(start_datetime, config.frontend_format).unix());
+  $("#end_time_unix").val(moment(end_datetime, config.frontend_format).unix());
 }
 
 function reloadCalendar () {
@@ -41,8 +51,8 @@ $(document).ready(function() {
       toggleModal("#event-modal");
     });
 
-    $("#reserve-form").submit(function(){
-      reserveEvent();
+    $("#reserve-form").submit(function(event){
+      reserveEvent(event);
     });
 
     $('#calendar').fullCalendar({
@@ -76,6 +86,12 @@ $(document).ready(function() {
       }, //events source
       timeFormat : config.frontend_format
     });
+    // attach timepickers
+    var options = {
+      disableTextInput : true,
+    };
+    $('#start_time').timepicker(options);
+    $('#end_time').timepicker(options);
     // referesh background mesh now that the main div has content
     $("#main-mesh").remove();
     mainMesh = MeshGen("#main", 20);
