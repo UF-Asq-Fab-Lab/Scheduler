@@ -245,7 +245,6 @@
        $eventsJSON = $this->getEventsJSON($start, $end);
        $event->replace = true;
        $event->return = $eventsJSON;
-      //  $event->return = '[{"start" : "2015-07-13T12:00:00", "end" : "2015-07-13T18:00:00", "title" : "test event", "color" : "#F00"}]';
      }
 
      protected function hookGetConfig(HookEvent $event){
@@ -254,19 +253,15 @@
        $event->return = $configJSON;
      }
 
-    //  protected function hookPostCancel(HookEvent $event){
-     //
-    //  }
-
      protected function getEventsJSON($start, $end){
        $start_timestamp = strtotime($start);
        $end_timestamp = strtotime($end);
        $json = array(
          'events' => array()
        );
-      //  $selector = "template=event, start_time>=$start_timestamp, ";
-      //  $selector.="end_time<=$end_timestamp, check_access=0, include=all";
-      $selector = "template=event, check_access=0, include=all";
+       $selector = "start_time>=$start_timestamp, ";
+       $selector.= "end_time<=$end_timestamp, check_access=0, include=all";
+       $selector = "template=event, check_access=0, include=all";
        $eventPages = wire('pages')->find($selector);
        foreach ($eventPages as $key => $page) {
          $json['events'][] = array ('title' => $page->title,
@@ -288,29 +283,39 @@
      }
 
      protected function validateReservation($post){
-       $valid = array();
-       $start_time = $post->start_time;
-       $end_time = $post->end_time;
-       $start_time_unix = $post->start_time_unix;
-       $end_time_unix = $post->end_time_unix;
-       $equipment = $post->equipment;
-       // Reservation Rules
-       $valid[] = $this->validateAdvanceTime("reservation", $start_time_unix);
-       $valid[] = $this->validateDuration($start_time_unix, $end_time_unix);
-       $valid[] = $this->validateEventOverlap($equipment, $start_time_unix, $end_time_unix);
-       $valid[] = $this->validateAccumulatedTime($start_time_unix, $end_time_unix);
-       //  check if valid has any false elements
-       return !in_array(false, $valid);
+       if(wire('user')->isLoggedIn()){
+         $valid = array();
+         $start_time = $post->start_time;
+         $end_time = $post->end_time;
+         $start_time_unix = $post->start_time_unix;
+         $end_time_unix = $post->end_time_unix;
+         $equipment = $post->equipment;
+         // Reservation Rules
+         $valid[] = $this->validateAdvanceTime("reservation", $start_time_unix);
+         $valid[] = $this->validateDuration($start_time_unix, $end_time_unix);
+         $valid[] = $this->validateEventOverlap($equipment, $start_time_unix, $end_time_unix);
+         $valid[] = $this->validateAccumulatedTime($start_time_unix, $end_time_unix);
+         //  check if valid has any false elements
+         return !in_array(false, $valid);
+       } else {
+         $this->response[] = "<p class='error'>You must be logged in to make a reservation!</p>";
+         return false;
+       }
      }
 
      protected function validateCancellation($post){
-       $valid = array();
-       $event = wire('pages')->get("id=$post->cancel_id, template=event");
-       $start_time = $event->start_time;
-       $start_unix = strtotime($start_time);
-       $valid[] = $this->validateAdvanceTime("cancellation", $start_unix);
-       $valid[] = $this->validateCancelPermission($event);
-       return !in_array(false, $valid);
+       if(wire('user')->isLoggedIn()){
+         $valid = array();
+         $event = wire('pages')->get("id=$post->cancel_id, template=event");
+         $start_time = $event->start_time;
+         $start_unix = strtotime($start_time);
+         $valid[] = $this->validateAdvanceTime("cancellation", $start_unix);
+         $valid[] = $this->validateCancelPermission($event);
+         return !in_array(false, $valid);
+       } else {
+         $this->response[] = "<p class='error'>You must be logged in to cancel reservations!</p>";
+         return false;
+       }
      }
 
      protected function validateCancelPermission($page){
@@ -323,7 +328,7 @@
      }
 
      protected function validateEventOverlap ($equipment, $start, $end) {
-       $events = wire('pages')->find("template=event");
+       $events = wire('pages')->find("template=event, check_access=0, include=all");
        foreach ($events as $event) {
          if($event->start_time){
            $event_start = strtotime($event->start_time);
