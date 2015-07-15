@@ -105,7 +105,7 @@ class ProcessEquipment extends ProcessPageType {
   }
 
   public function ___executeNavJSON(array $options = array()) {
-    $equipmentPages = $this->wire('pages')->find("template=equipment");
+    $equipmentPages = $this->wire('pages')->find("template=equipment, include=all, check_access=0");
     $parentID = $this->page->id;
 
     // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
