@@ -118,7 +118,7 @@ class ProcessEquipment extends ProcessPageType {
     $options['itemLabel'] = 'name';
     $options['add'] = "add/?parent_id=".$parentID;
 
-    return parent::___executeNavJSON($options);
+    return Process::___executeNavJSON($options);
   }
 
 }
