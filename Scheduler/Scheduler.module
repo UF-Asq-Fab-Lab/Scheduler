@@ -463,7 +463,7 @@
         if(!wire('user')->isLoggedIn() || !$hasrole){
           // user is not authorized to use the module, render message.
           $notAuthMessage = "<p class='error'>".$this->data["not_auth_message"]."</p>";
-          $event->return = str_replace("[uploader]", $notAuthMessage, $event->return);
+          $event->return = str_replace("[scheduler]", $notAuthMessage, $event->return);
           return false;
         }
       }
