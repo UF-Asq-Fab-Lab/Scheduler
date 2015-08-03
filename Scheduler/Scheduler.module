@@ -452,10 +452,18 @@
     protected function checkPermission(HookEvent $event){
       if(wire('modules')->isInstalled("LabUser") && $this->data['required_role'] != ''){
         // user module is installed, require privileges
-        if(!wire('user')->isLoggedIn() || !wire('user')->hasRole($this->data['required_role'])){
+        $reqroles = explode(",", $this->data['required_role']);
+        $hasrole = false;
+        foreach ($reqroles as $index => $value) {
+          if(!wire('user')->hasRole($value)){
+            $hasrole = true;
+            break;
+          }
+        }
+        if(!wire('user')->isLoggedIn() || !$hasrole){
           // user is not authorized to use the module, render message.
           $notAuthMessage = "<p class='error'>".$this->data["not_auth_message"]."</p>";
-          $event->return = str_replace("[schedule]", $notAuthMessage, $event->return);
+          $event->return = str_replace("[uploader]", $notAuthMessage, $event->return);
           return false;
         }
       }
