@@ -1,9 +1,9 @@
 <?php
 /**
- * ProcessWire Events Process
+ * ProcessWire Rules Process
  *
  * Developed for the Infinity Fab Lab at the University of Florida.
- * Provides backend interface for managing scheduled events
+ * Provides backend interface for managing rules for equipment.
  *
  * Thomas Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
@@ -13,42 +13,40 @@
  *
  */
 
-class ProcessEvent extends ProcessPageType {
+class ProcessRule extends ProcessPageType {
   //The code in this class takes heavy inspiration from
   //Ryan Cramer's ProcessUser module.
   static public function getModuleInfo() {
     return array(
-      'title' => 'ProcessEvent', // getModuleInfo title
+      'title' => 'ProcessRule', // getModuleInfo title
       'version' => 100,
-      'summary' => 'Manage schedule events', // getModuleInfo summary
+      'summary' => 'Manage reservation rules', // getModuleInfo summary
       'permanent' => false,
       'permission' => 'schedule-admin',
       'requires' => array('Scheduler>=1.0.0'),
-      'icon' => 'calendar',
+      'icon' => 'book',
       'useNavJSON' => true,
-      );
+    );
   }
 
   protected $lister = null;
 
   public function init() {
     parent::init();
-    $this->template = $this->wire('templates')->get("name=event");
+    $this->template = $this->wire('templates')->get("name=rule");
     $this->lister = $this->wire('modules')->get('ProcessPageLister');
-    $this->addHookAfter('Process::executeNavJSON', $this, 'hookNavJSON');
   }
 
-  protected function getLister($selector = '') {
-    $selector = "template=event, include=all, check_access=0, $selector";
+  protected function getLister($selector='') {
+    $selector = "template=rule, include=all, check_access=0, $selector";
     $lister = $this->lister;
-    if(!$lister)return null;
+    if(!$lister) return null;
     $lister->editMode = ProcessPageLister::windowModeDirect;
-
     $properties = array(
       'initSelector' => $selector,
       'columns' => $this->showFields,
-      'defaultSelector' => "name%=, start_time>=",
-      'defaultSort' => 'start_time',
+      'defaultSelector' => "name%=, available=",
+      'defaultSort' => 'name',
       'parent' => $this->page,
       'template' => $this->template,
       'editURL' => './edit/',
@@ -56,10 +54,9 @@ class ProcessEvent extends ProcessPageType {
       'allowSystem' => false,
       'allowIncludeAll' => true,
     );
-    foreach($properties as $name => $val) {
+    foreach($properties as $name => $val){
       $lister->$name = $val;
     }
-
     return $lister;
   }
 
@@ -72,29 +69,15 @@ class ProcessEvent extends ProcessPageType {
   public function executeConfig() {
     return $this->getLister()->executeConfig();
   }
-
   public function executeViewport() {
     return $this->getLister()->executeViewport();
   }
-
   public function executeReset() {
     return $this->getLister()->executeReset();
   }
-
   public function executeActions() {
     return $this->getLister()->executeActions();
   }
-
-  public function ___executeClean(){
-    $eventPages = $this->wire('pages')->find("template=event, check_access=0, include=all");
-    foreach ($eventPages as $key => $event) {
-      if($event->end_time < time()){
-        wire('pages')->delete($event, true);
-      }
-    }
-    return "<p>Events cleaned.</p>";
-  }
-
   public function ___executeEdit() {
     $this->addHookAfter('ProcessPageEdit::buildForm', $this, 'hookBuildForm');
     return parent::___executeEdit();
@@ -113,46 +96,30 @@ class ProcessEvent extends ProcessPageType {
     $parent = $this->wire('pages')->get("name=scheduler");
     $p = new Page();
     $p->template = "admin";
-    $p->name = "events";
-    $p->title = "Events";
+    $p->name = "rule";
+    $p->title = "Rule";
     $p->process = $this;
     $p->parent = $parent;
     $p->save();
     parent::___install();
   }
 
-  public function hookNavJSON(HookEvent $event){
-    $data = json_decode($event->return, true);
-    $clean = array(
-                    array(
-                      'url' => 'clean/',
-                      'label' => 'Clean',
-                      'icon' => 'calendar-o'
-                    )
-              );
-    $data['list'] = array_merge($clean, $data['list']);
-    $event->replace = true;
-    $event->return = json_encode($data);
-  }
-
   public function ___executeNavJSON(array $options = array()) {
-
-    $eventPages = $this->wire('pages')->find("template=event, check_access=0, include=all");
+    $rulePages = $this->wire('pages')->find(
+    "template=rule, include=all, check_access=0");
     $parentID = $this->page->id;
 
-    // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
-    $eventArray = array();
-    foreach($eventPages as $ep) {
-      $this->message($ep->name);
-      $eventArray[] = $ep;
+    // pull icons out of pageLabelField and populate to an 'icon' property for
+    // JSON nav
+    $ruleArray = array();
+    foreach($rulePages as $rup) {
+      $equipmentArray[] = $rup;
     }
 
-    $options['items'] = $eventArray;
+    $options['items'] = $ruleArray;
     $options['itemLabel'] = 'name';
     $options['add'] = "add/?parent_id=".$parentID;
 
     return Process::___executeNavJSON($options);
   }
-
 }
-?>

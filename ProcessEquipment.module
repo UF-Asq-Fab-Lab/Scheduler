@@ -2,7 +2,7 @@
 /**
  * ProcessWire Events Process
  *
- * Developed for the A² Fab Lab at the University of Florida.
+ * Developed for the Infinity Fab Lab at the University of Florida.
  * Provides backend interface for managing reservable equipment
  *
  * Thomas Storey, 2015
@@ -105,10 +105,12 @@ class ProcessEquipment extends ProcessPageType {
   }
 
   public function ___executeNavJSON(array $options = array()) {
-    $equipmentPages = $this->wire('pages')->find("template=equipment, include=all, check_access=0");
+    $equipmentPages = $this->wire('pages')->find(
+    "template=equipment, include=all, check_access=0");
     $parentID = $this->page->id;
 
-    // pull icons out of pageLabelField and populate to an 'icon' property for JSON nav
+    // pull icons out of pageLabelField and populate to an 'icon' property for
+    // JSON nav
     $equipmentArray = array();
     foreach($equipmentPages as $eqp) {
       $equipmentArray[] = $eqp;

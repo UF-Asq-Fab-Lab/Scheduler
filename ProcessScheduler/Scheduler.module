@@ -1,9 +1,9 @@
 <?php
 
 /**
- * A²Fab Lab Scheduler Module
+ * InfinityFab Lab Scheduler Module
  *
- * Developed for the A² Fab Lab at the University of Florida.
+ * Developed for the Infinity Fab Lab at the University of Florida.
  * Root Module that handles installing, uninstalling and hooking together
  * the child modules for the Scheduler system. Installs ProcessEvent,
  * ProcessEquipment, and handles the frontend schedule page.
@@ -23,8 +23,8 @@
 
    public static function getModuleInfo(){
      return array(
-       'title' => 'A² Fab Lab Scheduler System',
-       'summary' => 'The Root Module for the A² Fab Lab Scheduler System',
+       'title' => 'Infinity Fab Lab Scheduler System',
+       'summary' => 'The Root Module for the Infinity Fab Lab Scheduler System',
        'version' => 100,
        'author' => "Thomas R Storey",
        'autoload' => true,
