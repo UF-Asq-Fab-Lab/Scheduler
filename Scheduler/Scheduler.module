@@ -410,7 +410,18 @@
          $event = wire('pages')->get("id=$post->cancel_id, template=event");
          $start_time = $event->start_time;
          $start_unix = strtotime($start_time);
-         $valid[] = $this->validateAdvanceTime("cancellation", $start_unix);
+         $eqName = $event->equipment;
+         $eqPage = wire('pages')->get('template=equipment, name={$eqName}');
+         $rule_strs = explode(',', $eqPage->rules);
+         $rules = array();
+         if(count($rule_strs)){
+           foreach ($rule_strs as $index => $rs) {
+             $rules[$rs] = wire('pages')->get("name={$rs}");
+           }
+           foreach ($rules as $key => $rule) {
+             $valid[] = $this->validateAdvanceTime("cancellation", $start_unix, $rule);
+           }
+         }
          $valid[] = $this->validateCancelPermission($event);
          return !in_array(false, $valid);
        } else {
