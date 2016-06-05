@@ -1,0 +1,224 @@
+<?php
+/**
+ * InfinityFab Lab Scheduler Module
+ *
+ * Developed for the Infinity Fab Lab at the University of Florida.
+ * Features:
+ *  - frontend scheduler interface, using Adam Shaw's FullCalendar javascript calendar
+ *  - reservation pagetype, which represents a single equipment reservation
+ *  - equipment pagetype, which represents a single piece of reservable equipment
+ *  - rule pagetype, which represents a set of rules according to which a piece of equipment may be reserved
+ *  - backend interface for managing reservations and equipment, using ProcessPageTypes
+ *  - fully configurable in terms
+ *
+ * Thomas R Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ *
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ * sudo rm -R /var/www/html/sandbox/fablab/site/modules/LabUser && sudo cp ~/projects/fablab/LabUser /var/www/html/sandbox/fablab/site/modules/LabUser
+ */
+
+class LabScheduler extends WireData implements Module, ConfigurableModule {
+
+  /**
+   * Return information about the module
+   *
+   */
+  static public function getModuleInfo() {
+    return array(
+      'title' => 'Lab Equipment Scheduler',
+      'version' => 100,
+      'summary' => 'Allows frontend users to reserve equipment through a calendar interface according to a set of rules assigned to each piece of equipment',
+      'author' => 'Thomas R Storey',
+      'autoload' => true,
+      'singular' => true,
+      'installs' => array(
+        'ProcessLabTool',
+        'ProcessLabReservation',
+        'ProcessLabEquipmentRule'
+      ),
+      'requires' => array('FabLabModuleHelpers')
+      );
+  }
+  const LabReservationTemplateName = 'lab_reservation';
+  const LabToolTemplateName = 'lab_tool';
+  const LabRulesetTemplateName = 'lab_ruleset';
+
+  protected $initialized = false;
+
+  public function __construct() {
+    $this->set('initialized', false);
+    //load classes
+    $dirname = dirname(__FILE__);
+		require_once($dirname . '/LabReservation.php');
+    require_once($dirname . '/LabReservations.php');
+    require_once($dirname . '/LabTool.php');
+    require_once($dirname . '/LabTools.php');
+    require_once($dirname . '/LabRuleset.php');
+    require_once($dirname . '/LabRulesets.php');
+    //set config placeholders
+    $this->set('labReservationsPageID', 0);
+    $this->set('labToolsPageID', 0);
+    $this->set('labRulesetsPageID', 0);
+  }
+
+  public function init() {
+    // prevent possible double init
+		if($this->initialized) return;
+		$this->initialized = true;
+
+    $this->data = wire('modules')->getModuleConfigData($this);
+    $this->schedulePageID = $this->data['lab_schedule_id'];
+    $this->helper = $this->wire('modules')->get('FabLabModuleHelpers');
+
+    // create $lab_reservations API variable.
+    $labReservationTemplate = $this->templates->get(self::LabReservationTemplateName);
+    if(!$labReservationTemplate) return;
+    if(!$this->labReservationsPageID){
+      $selector = 'template=admin, process=ProcessLabReservation, name=lab_reservations';
+      $lrp = $this->wire('pages')->get($selector);
+      $this->labReservationsPageID = $lrp->id;
+    }
+    $lab_reservations = new LabReservations($labReservationTemplate, $this->labReservationsPageID);
+    $this->wire('lab_charges', $lab_charges);
+
+    // create $lab_tools API variable.
+    $labToolTemplate = $this->templates->get(self::LabToolTemplateName);
+    if(!$labToolTemplate) return;
+    if(!$this->labToolsPageID){
+      $selector = 'template=admin, process=ProcessLabTool, name=lab_tools';
+      $lcip = $this->wire('pages')->get($selector);
+      $this->labToolsPageID = $lcip->id;
+    }
+    $lab_tools = new LabTools($labToolTemplate, $this->labToolsPageID);
+    $this->wire('lab_tools', $lab_tools);
+
+  }
+
+  public function ready () {
+    if($this->wire('config')->ajax){
+      return $this->handleAjaxRequests();
+    }
+    if($this->wire('page')->id == $this->schedulerPageID){
+      if($post = $this->wire('input')->post){
+        if($post->reserve){
+          $this->handleCreateReservation($this->wire('input')->post);
+        }
+        if($post->cancel){
+          $this->handleCancelReservation($this->wire('input')->post);
+        }
+      }
+      // add styles and scripts to scheduler page
+      $liburl = wire('config')->urls->siteModules.'/LabScheduler/lib/';
+      $incurl = wire('config')->urls->siteModules.'/LabScheduler/includes/';
+      $this->wire('config')->styles->add($liburl."css/fullcalendar.css");
+      $this->wire('config')->styles->add($liburl."css/scheduler.css");
+      $this->wire('config')->styles->add($incurl."css/labScheduler.css");
+
+      $this->wire('config')->scripts->add($liburl."js/moment.js");
+      $this->wire('config')->scripts->add($liburl."js/fullcalendar.js");
+      $this->wire('config')->scripts->add($liburl."js/scheduler.js");
+      $this->wire('config')->scripts->add($incurl."js/labScheduler.js");
+      // hook to template render
+      $this->addHookAfter('TemplateFile::render', $this, 'hookRenderSchedule');
+    }
+  }
+
+  protected function hookRenderSchedule(HookEvent $event){
+    // render schedule to string.
+    $path = wire('config')->paths->siteModules."/LabScheduler/includes/labSchedule.inc";
+    $res .= $this->helper->renderFileToString($path);
+    $event->return = str_replace("[schedule]", $res, $event->return);
+  }
+
+  protected function handleCreateReservation($postdata){
+
+  }
+
+  protected function handleCancelReservation($postdata){
+
+  }
+
+  protected function handleAjaxRequests(){
+
+  }
+
+  protected function hookGetEvents(HookEvent $event){
+
+  }
+
+  protected function hookGetConfig(HookEvent $event){
+
+  }
+
+  protected function renderReservationsJSON($start, $end){
+
+  }
+
+  protected function renderConfigJSON(){
+
+  }
+
+  protected function validateReservation($postdata){
+
+  }
+
+  protected function validateCancellation($postdata){
+
+  }
+
+  protected function evaluateRuleset($start, $end, $user, $tool, $ruleset){
+
+  }
+
+  protected function isValidDay($start, $end, $rule){
+
+  }
+
+  protected function isValidHour($start, $end, $rule){
+
+  }
+
+  protected function isValidToolUsagePerWeek($start, $end, $tool, $rule){
+
+  }
+
+  protected function isValidCancelUser($start, $end, $rule){
+
+  }
+
+  protected function isValidOverlap($start, $end, $rule){
+
+  }
+
+  protected function isValidTotalUsagePerWeek($start, $end, $rule){
+
+  }
+
+  protected function isValidLength($start, $end, $rule){
+
+  }
+
+  protected function isValidBuffer($start, $end, $rule){
+
+  }
+
+  protected function installer($install = true) {
+		require_once($this->config->paths->LabScheduler . 'LabSchedulerInstall.php');
+		$installer = new LabSchedulerInstall();
+		if($install) $installer->install();
+			else $installer->uninstall();
+	}
+
+  public function install () {
+    $this->installer(true);
+  }
+
+  public function uninstall () {
+    $this->installer(false);
+  }
+
+}
+
+?>

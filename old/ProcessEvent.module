@@ -38,7 +38,7 @@ class ProcessEvent extends ProcessPageType {
     $this->addHookAfter('Process::executeNavJSON', $this, 'hookNavJSON');
   }
 
-  protected function getLister($selector = '') {
+  public function getLister($selector = '') {
     $selector = "template=event, include=all, check_access=0, $selector";
     $lister = $this->lister;
     if(!$lister)return null;

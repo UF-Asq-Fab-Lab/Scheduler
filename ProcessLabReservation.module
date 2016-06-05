@@ -1,0 +1,56 @@
+<?php
+
+/**
+ * Infinity Fab Lab Charge Process Module
+ *
+ * Developed for the Infinity Fab Lab at the University of Florida.
+ * Lists and allows adding and editing Lab Charge pages.
+ *
+ * Thomas R Storey, 2015
+ * Licensed under MIT License, see LICENSE.TXT
+ *
+ * http://fablab.arts.ufl.edu
+ * https://github.com/UF-Asq-Fab-Lab
+ */
+
+class ProcessLabReservation extends ProcessPageType {
+
+	static public function getModuleInfo() {
+		return array(
+			'title'      => __('Lab Reservations', __FILE__), // getModuleInfo title
+			'version'    => 100,
+			'summary'    => __('Manage lab reservations', __FILE__), // getModuleInfo summary
+			'permission' => 'user-admin',
+			'icon'       => 'calendar',
+      'requires'   => array('LabScheduler'),
+			'useNavJSON' => true,
+		);
+	}
+
+	public function __construct() {
+		$this->set("maxAjaxQty", 25);
+		return parent::__construct();
+    $showFields = array(
+      'title',
+      'lab_reservation_tool',
+      'lab_reservation_user',
+      'lab_reservation_start',
+      'lab_reservation_end'
+    );
+		$this->set('showFields', $showFields);
+	}
+
+	public function init() {
+		parent::init();
+	}
+
+	protected function useLister() {
+		return true;
+	}
+
+	public function ___executeEdit() {
+		$out = parent::___executeEdit();
+		return $out;
+	}
+}
+?>

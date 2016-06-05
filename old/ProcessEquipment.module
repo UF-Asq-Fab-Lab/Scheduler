@@ -1,9 +1,9 @@
 <?php
 /**
- * ProcessWire Rules Process
+ * ProcessWire Events Process
  *
  * Developed for the Infinity Fab Lab at the University of Florida.
- * Provides backend interface for managing rules for equipment.
+ * Provides backend interface for managing reservable equipment
  *
  * Thomas Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
@@ -13,18 +13,18 @@
  *
  */
 
-class ProcessRule extends ProcessPageType {
+class ProcessEquipment extends ProcessPageType {
   //The code in this class takes heavy inspiration from
   //Ryan Cramer's ProcessUser module.
   static public function getModuleInfo() {
     return array(
-      'title' => 'ProcessRule', // getModuleInfo title
+      'title' => 'ProcessEquipment', // getModuleInfo title
       'version' => 100,
-      'summary' => 'Manage reservation rules', // getModuleInfo summary
+      'summary' => 'Manage equipment', // getModuleInfo summary
       'permanent' => false,
       'permission' => 'schedule-admin',
       'requires' => array('Scheduler>=1.0.0'),
-      'icon' => 'book',
+      'icon' => 'th',
       'useNavJSON' => true,
     );
   }
@@ -33,12 +33,12 @@ class ProcessRule extends ProcessPageType {
 
   public function init() {
     parent::init();
-    $this->template = $this->wire('templates')->get("name=rule");
+    $this->template = $this->wire('templates')->get("name=equipment");
     $this->lister = $this->wire('modules')->get('ProcessPageLister');
   }
 
-  protected function getLister($selector='') {
-    $selector = "template=rule, include=all, check_access=0, $selector";
+  public function getLister($selector = '') {
+    $selector = "template=equipment, include=all, check_access=0, $selector";
     $lister = $this->lister;
     if(!$lister) return null;
     $lister->editMode = ProcessPageLister::windowModeDirect;
@@ -96,8 +96,8 @@ class ProcessRule extends ProcessPageType {
     $parent = $this->wire('pages')->get("name=scheduler");
     $p = new Page();
     $p->template = "admin";
-    $p->name = "rule";
-    $p->title = "Rule";
+    $p->name = "equipment";
+    $p->title = "Equipment";
     $p->process = $this;
     $p->parent = $parent;
     $p->save();
@@ -105,21 +105,23 @@ class ProcessRule extends ProcessPageType {
   }
 
   public function ___executeNavJSON(array $options = array()) {
-    $rulePages = $this->wire('pages')->find(
-    "template=rule, include=all, check_access=0");
+    $equipmentPages = $this->wire('pages')->find(
+    "template=equipment, include=all, check_access=0");
     $parentID = $this->page->id;
 
     // pull icons out of pageLabelField and populate to an 'icon' property for
     // JSON nav
-    $ruleArray = array();
-    foreach($rulePages as $rup) {
-      $equipmentArray[] = $rup;
+    $equipmentArray = array();
+    foreach($equipmentPages as $eqp) {
+      $equipmentArray[] = $eqp;
     }
 
-    $options['items'] = $ruleArray;
+    $options['items'] = $equipmentArray;
     $options['itemLabel'] = 'name';
     $options['add'] = "add/?parent_id=".$parentID;
 
     return Process::___executeNavJSON($options);
   }
+
 }
+?>
