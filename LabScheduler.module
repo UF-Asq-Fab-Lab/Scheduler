@@ -116,7 +116,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $this->wire('config')->styles->add($liburl."css/scheduler.css");
       $this->wire('config')->styles->add($incurl."css/labScheduler.css");
 
-      $this->wire('config')->scripts->add($liburl."js/moment.js");
+      $this->wire('config')->scripts->add($liburl."js/moment.min.js");
       $this->wire('config')->scripts->add($liburl."js/fullcalendar.js");
       $this->wire('config')->scripts->add($liburl."js/scheduler.js");
       $this->wire('config')->scripts->add($incurl."js/labScheduler.js");
