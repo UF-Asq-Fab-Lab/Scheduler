@@ -20,11 +20,11 @@ $data = wire('modules')->getModuleConfigData('LabScheduler');
     <div class="row" id="reservation-start-section">
       <div class="six columns">
         <label for="reservation-start-date">Date</label>
-        <input class="u-full-width" type="date" name="reservation-star-date" id="reservation-start-date">
+        <input class="u-full-width" type="date" name="reservation-start-date" id="reservation-start-date">
       </div>
       <div class="six columns">
         <label for="reservation-start-time">Time</label>
-        <input class="u-full-width" type="time" name="reservation-star-time" id="reservation-start-time">
+        <input class="u-full-width" type="time" name="reservation-start-time" id="reservation-start-time">
       </div>
     </div>
   </div>

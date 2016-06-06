@@ -93,7 +93,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     }
     $lab_tools = new LabTools($labToolTemplate, $this->labToolsPageID);
     $this->wire('lab_tools', $lab_tools);
-
+    $this->response = array();
   }
 
   public function ready () {
@@ -103,7 +103,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     if($this->wire('page')->id == $this->schedulerPageID){
       if($post = $this->wire('input')->post){
         if($post->reserve){
-          $this->handleCreateReservation($this->wire('input')->post);
+          $this->handleCreateReservation();
         }
         if($post->cancel){
           $this->handleCancelReservation($this->wire('input')->post);
@@ -127,24 +127,86 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
 
   protected function hookRenderSchedule(HookEvent $event){
     // render schedule to string.
-    $path = wire('config')->paths->siteModules."/LabScheduler/includes/labSchedule.inc";
+    $incurl = wire('config')->urls->siteModules.'/LabScheduler/includes/';
+    $path = $incurl."/labSchedule.inc";
     $res .= $this->helper->renderFileToString($path);
     $event->return = str_replace("[schedule]", $res, $event->return);
   }
 
-  protected function handleCreateReservation($postdata){
-
+  protected function handleCreateReservation(){
+    $input = $this->wire('input');
+    if($input->post('reservation-submit')){
+      if($this->validateReservation()){
+        $res = new LabReservation();
+        $username = $this->wire('user')->name;
+        $tool = $input->post->text('reservation-tool');
+        $startDate = $input->post->text("reservation-start-date");
+        $startTime = $input->post->text('reservation-start-time');
+        $endDate = $input->post->text("reservation-end-date");
+        $endTime = $input->post->text('reservation-end-time');
+        $res->title = sprintf("%s %s %s %s", $username, $tool, $startDate, $startTime);
+        $res->lab_reservation_start = $startDate." ".$startTime;
+        $res->lab_reservation_end = $endDate." ".$endTime;
+        $res->lab_reservation_tool = $this->wire('lab_tools')->get('name='.$tool);
+        $res->lab_reservation_user = $this->wire('user');
+        $res->save();
+        $this->response[] = "<p class='message'>Reservation successful!</p>"
+      } else {
+        $invalidMsg = "<p class='error'>Invalid reservation. Please see the";
+        $invalidMsg .= " messages below and adjust your reservation as";
+        $invalidMsg .= " necessary, then try again.</p>";
+        array_unshift($this->response, $invalidMsg);
+      }
+    }
   }
 
-  protected function handleCancelReservation($postdata){
-
+  protected function handleCancelReservation(){
+    $input = $this->wire('input');
+    if($input->post('reservation-cancel-submit')){
+      if($this->validateCancellation()){
+        $resID = $input->post->text('reservation-cancel-id');
+        $res = $this->wire('lab_reservations')->get($resID);
+        $this->wire('lab_reservations')->delete($res, true);
+        $this->response[] = "<p class='message'>Reservation cancelled.</p>";
+      } else {
+        $invalidMsg = "<p class='error'>Reservation cancellation failed.</p>";
+        array_unshift($this->response, $invalidMsg);
+      }
+    }
   }
 
   protected function handleAjaxRequests(){
-
+    if(wire('config')->ajax && wire('input')->get('reservations')){
+      $this->addHookBefore('TemplateFile::render', $this, 'hookAjaxGetReservations');
+    }
+    if(wire('config')->ajax && wire('input')->get->('tools')){
+      $this->addHookBefore('TemplateFile::render', $this, 'hookAjaxGetTools');
+    }
   }
 
   protected function hookGetEvents(HookEvent $event){
+    $input = $this->wire('input');
+    $startTimestamp = strtotime($input->get->text('start'));
+    $endTimestamp = strtotime($input->get->text('end'));
+    $json = array(
+      'events' => array(),
+      'resources' => array()
+    );
+    $selector = "lab_reservation_start>=$startTimestamp, ";
+    $selector.= "lab_reservation_end<=$endTimestamp, ";
+    $selector.= "check_access=0, include=all";
+    $reservations = $this->wire('lab_reservations')->find($selector);
+    foreach($reservations as $res){
+      $json['events'][] = array(
+        'title' => $res->title,
+        'start' => $res->lab_reservation_start,
+        'end' => $res->lab_reservation_end,
+        'resourceId' => $res->lab_reservation->tool->id,
+        'id' => $res->id
+      );
+    }
+
+    
 
   }
 
@@ -161,7 +223,12 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
   }
 
   protected function validateReservation($postdata){
-
+    $dateStartStr = $input->post('reservation-start-date');
+    $timeStartStr = $input->post('reservation-start-time');
+    $dateTimeStart = new DateTime($dateStartStr." ".$timeStartStr);
+    $dateEndStr = $input->post('reservation-end-date');
+    $timeEndStr = $input->post('reservation-end-time');
+    $dateTimeEnd = new DateTime($dateEndStr." ".$timeEndStr);
   }
 
   protected function validateCancellation($postdata){
