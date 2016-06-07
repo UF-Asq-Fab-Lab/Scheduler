@@ -1,11 +1,11 @@
 <?php
 
 /**
- * Infinity Fab Lab Charge Module
+ * Infinity Fab Lab Ruleset Module
  *
  * Developed for the Infinity Fab Lab at the University of Florida.
- * Defines a Lab Charge page type which holds data and behaviors relevant to an
- * individual charge.
+ * Defines a Lab Ruleset page type which holds data and behaviors relevant to an
+ * individual ruleset.
  *
  * Thomas R Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
@@ -37,7 +37,7 @@ class LabRulesets extends PagesType {
 	}
 
   /**
-	 * Hook called when a lab charge is deleted
+	 * Hook called when a lab ruleset is deleted
 	 *
 	 * @param Page $language
 	 *
@@ -47,7 +47,7 @@ class LabRulesets extends PagesType {
 	}
 
 	/**
-	 * Hook called when a lab charge is added
+	 * Hook called when a lab ruleset is added
 	 *
 	 * @param Page $language
 	 *
@@ -57,15 +57,15 @@ class LabRulesets extends PagesType {
 	}
 
 	/**
-	 * Hook called when a lab charge is added or deleted
+	 * Hook called when a lab ruleset is added or deleted
 	 *
 	 * @param Page $language
 	 * @param string $what What occurred? ('added' or 'deleted')
 	 *
 	 */
 	public function ___updated(Page $labRuleset, $what) {
-		$this->reloadLabCharges();
-		$this->message("Updated lab charge item $labRuleset->name ($what)", Notice::debug);
+		// $this->reloadLabRulesets();
+		$this->message("Updated lab ruleset item $labRuleset->name ($what)", Notice::debug);
 	}
 
 }

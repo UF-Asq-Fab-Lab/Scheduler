@@ -1,0 +1,8 @@
+#reservation-form-container, #cancellation-form-container {
+  display: none;
+  margin-bottom: 20px;
+}
+
+.fc-content table {
+  margin-bottom: 0;
+}

@@ -23,6 +23,7 @@ class LabReservation extends Page {
 	 */
 	public function __construct(Template $tpl = null) {
 		if(is_null($tpl)) $tpl = $this->wire('templates')->get('lab_reservation');
+    if(!$this->parent_id) $this->set('parent_id', $this->wire('modules')->getModuleConfigData("LabScheduler")['lab_reservations_id']);
 		parent::__construct($tpl);
 	}
 

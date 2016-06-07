@@ -1,11 +1,11 @@
 <?php
 
 /**
- * Infinity Fab Lab Charge Module
+ * Infinity Fab Lab Reservation Module
  *
  * Developed for the Infinity Fab Lab at the University of Florida.
- * Defines a Lab Charge page type which holds data and behaviors relevant to an
- * individual charge.
+ * Defines a Lab Reservation page type which holds data and behaviors relevant to an
+ * individual reservation.
  *
  * Thomas R Storey, 2015
  * Licensed under MIT License, see LICENSE.TXT
@@ -37,7 +37,7 @@ class LabReservations extends PagesType {
 	}
 
   /**
-	 * Hook called when a lab charge is deleted
+	 * Hook called when a lab reservation is deleted
 	 *
 	 * @param Page $language
 	 *
@@ -47,7 +47,7 @@ class LabReservations extends PagesType {
 	}
 
 	/**
-	 * Hook called when a lab charge is added
+	 * Hook called when a lab reservation is added
 	 *
 	 * @param Page $language
 	 *
@@ -57,15 +57,15 @@ class LabReservations extends PagesType {
 	}
 
 	/**
-	 * Hook called when a lab charge is added or deleted
+	 * Hook called when a lab reservation is added or deleted
 	 *
 	 * @param Page $language
 	 * @param string $what What occurred? ('added' or 'deleted')
 	 *
 	 */
 	public function ___updated(Page $labReservation, $what) {
-		$this->reloadLabCharges();
-		$this->message("Updated lab charge item $labReservation->name ($what)", Notice::debug);
+		// $this->reloadLabReservations();
+		$this->message("Updated lab reservation item $labReservation->name ($what)", Notice::debug);
 	}
 
 }

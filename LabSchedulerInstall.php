@@ -16,23 +16,23 @@
       $helper = $this->modules->get('FabLabModuleHelpers');
 
       // create ProcessList page
-      $schedulerPage = $helper->getAdminPage('lab_charger', 'ProcessList');
+      $schedulerPage = $helper->getAdminPage('lab_scheduler', 'ProcessList', null, null);
 
       // create ProcessLabReservation page
       $labReservationsPage = $helper->getAdminPage('lab_reservations',
                                               'ProcessLabReservation',
-                                              $schedulerPage->id);
+                                              $schedulerPage->id, null);
       // create ProcessLabTool page
       $labToolsPage = $helper->getAdminPage('lab_tools',
                                               'ProcessLabTool',
-                                              $schedulerPage->id);
+                                              $schedulerPage->id, null);
       // create ProcessLabRuleset page
       $labRulesetsPage = $helper->getAdminPage('lab_rulesets',
                                               'ProcessLabRuleset',
-                                              $schedulerPage->id);
+                                              $schedulerPage->id, null);
 
       // create Schedule frontend page
-      $schedulePage = $this->helper->getFrontendPage("schedule", null, null, "one-column-page");
+      $schedulePage = $helper->getFrontendPage("schedule", null, null, "one-column-page");
       $schedulePage->of(false);
       $schedulePage->body = "[scheduler]";
       $schedulePage->save();
@@ -83,7 +83,7 @@
         'description'=>'Check this on if the tool is currently operational and available.'
       );
       $status_opt = array(
-        'tags'=>'Scheduler'
+        'tags'=>'Scheduler',
         'description'=>'A short explanatory note describing the tool\'s current status.'
       );
       $ltf = array(
@@ -91,7 +91,7 @@
         'lab_tool_color' => array('type'=>'FieldtypeText', 'options'=>$color_opt),
         'lab_tool_available' => array('type'=>'FieldtypeCheckbox', 'options'=>$active_opt),
         'lab_tool_status' => array('type'=>'FieldtypeText', 'options'=>$status_opt),
-        'lab_tool_ruleset' => array('type'=>'FieldtypePage', 'options'=>$ruleset_opt),
+        'lab_tool_ruleset' => array('type'=>'FieldtypePage', 'options'=>$ruleset_opt)
       );
       $labToolTemplate = $helper->getTemplate(
       LabScheduler::LabToolTemplateName, $ltf, 'Scheduler', $templateOptions);
@@ -101,6 +101,7 @@
       'tags'=>'Scheduler',
       'parent_id' => $this->wire('config')->rolesPageID,
       'inputfield' => 'InputfieldAsmSelect',
+      'derefAsPage' => 1,
       'description' => 'To users with which roles should this ruleset apply?'
     );
     $int_opt = array(
@@ -137,7 +138,7 @@
       'lab_scheduler_root_id'=>$schedulerPage->id,
       'lab_schedule_id'=>$schedulePage->id
     );
-    $this->wire('modules')->saveModuleConfigData('LabCharger', $configData);
+    $this->wire('modules')->saveModuleConfigData('LabScheduler', $configData);
 
     $this->message("Lab Scheduler installed!");
   }

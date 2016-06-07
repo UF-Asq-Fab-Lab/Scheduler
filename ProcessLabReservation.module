@@ -42,15 +42,73 @@ class ProcessLabReservation extends ProcessPageType {
 
 	public function init() {
 		parent::init();
+		$this->addHookAfter('ProcessPageAdd::buildForm', $this, 'hookAfterPageAddBuildForm');
+		$this->addHookAfter('ProcessPageLister::execute', $this, 'hookAfterListerExecute');
 	}
 
 	protected function useLister() {
 		return true;
 	}
 
+	public function ___execute() {
+		if($this->wire('input')->post('clean-reservations-submit')){
+			// delete all past reservations
+			$now = time();
+			$oldReservations = $this->wire('lab_reservations')->find("lab_reservation_end<={$now}, check_access=0, include=all");
+			foreach ($oldReservations as $or) {
+				$this->wire('lab_reservations')->delete($or);
+			}
+		}
+		$out = parent::___execute();
+		return $out;
+	}
+
 	public function ___executeEdit() {
 		$out = parent::___executeEdit();
 		return $out;
+	}
+
+	protected function hookAfterPageAddBuildForm(HookEvent $event){
+		$form = $event->return;
+		$formSave = $form->children('name=submit_save')->first();
+		// tool
+		$field = $this->wire('fields')->get('lab_reservation_tool')->getInputfield(new NullPage());
+		$form->insertBefore($field, $formSave);
+		// user
+		$field = $this->wire('fields')->get('lab_reservation_user')->getInputfield(new NullPage());
+		$form->insertBefore($field, $formSave);
+		// start
+		$field = $this->wire('fields')->get('lab_reservation_start')->getInputfield(new NullPage());
+		$form->insertBefore($field, $formSave);
+		// end
+		$field = $this->wire('fields')->get('lab_reservation_end')->getInputfield(new NullPage());
+		$form->insertBefore($field, $formSave);
+
+		$event->return = $form;
+	}
+
+	protected function hookAfterListerExecute(HookEvent $event){
+
+		if($this->wire('config')->ajax) return $event->return;
+
+		$form = $this->wire('modules')->get('InputfieldForm');
+		$form->attr('id', 'ProcessCleanReservationsForm');
+		$form->method = 'post';
+		$form->action = './';
+		$form->attr('title', 'Lab Reservations');
+
+		$field = $this->wire('modules')->get('InputfieldSubmit');
+		$field->attr('value', "Clean Reservations Log");
+		$field->attr('id', 'ProcessLabReservationsClean');
+		$field->attr('name', 'clean-reservations-submit');
+		$field->icon = 'remove';
+		$field->descriptiong = "Click this button to delete all past reservations. Future reservations will be left untouched.";
+
+		$form->add($field);
+
+		$out = $form->render();
+
+		$event->return = $out.$event->return;
 	}
 }
 ?>

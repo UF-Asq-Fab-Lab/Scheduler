@@ -39,6 +39,8 @@ class ProcessLabRuleset extends ProcessPageType {
 
 	public function init() {
 		parent::init();
+		$this->addHookAfter('ProcessPageAdd::buildForm', $this, 'hookAfterPageAddBuildForm');
+
 	}
 
 	protected function useLister() {
@@ -48,6 +50,45 @@ class ProcessLabRuleset extends ProcessPageType {
 	public function ___executeEdit() {
 		$out = parent::___executeEdit();
 		return $out;
+	}
+
+	protected function hookAfterPageAddBuildForm(HookEvent $event){
+		$form = $event->return;
+		$formSave = $form->children('name=submit_save')->first();
+		// roles
+		$field = $this->wire('fields')->get('lab_ruleset_roles')->getInputfield(new NullPage());
+		$field->value = "user";
+		$form->insertBefore($field, $formSave);
+		// hours per week
+		$field = $this->wire('fields')->get('lab_ruleset_hours_per_week')->getInputfield(new NullPage());
+		$field->value = 10;
+		$form->insertBefore($field, $formSave);
+		// reserve buffer
+		$field = $this->wire('fields')->get('lab_ruleset_reservation_buffer_hours')->getInputfield(new NullPage());
+		$field->value = 6;
+		$form->insertBefore($field, $formSave);
+		// cancel buffer
+		$field = $this->wire('fields')->get('lab_ruleset_cancellation_buffer_hours')->getInputfield(new NullPage());
+		$field->value = 6;
+		$form->insertBefore($field, $formSave);
+
+		$field = $this->wire('fields')->get('lab_ruleset_minimum_reservation_hours')->getInputfield(new NullPage());
+		$field->value = 1;
+		$form->insertBefore($field, $formSave);
+
+		$field = $this->wire('fields')->get('lab_ruleset_maximum_reservation_hours')->getInputfield(new NullPage());
+		$field->value = 3;
+		$form->insertBefore($field, $formSave);
+
+		$field = $this->wire('fields')->get('lab_ruleset_reservable_days')->getInputfield(new NullPage());
+		$field->value = "2,3,4,5,6";
+		$form->insertBefore($field, $formSave);
+
+		$field = $this->wire('fields')->get('lab_ruleset_reservable_hours')->getInputfield(new NullPage());
+		$field->value = "8,9,10,11,12,13,14,15,16,17,18";
+		$form->insertBefore($field, $formSave);
+
+		$event->return = $form;
 	}
 }
 ?>

@@ -27,7 +27,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
    */
   static public function getModuleInfo() {
     return array(
-      'title' => 'Lab Equipment Scheduler',
+      'title' => 'Lab Scheduler',
       'version' => 100,
       'summary' => 'Allows frontend users to reserve equipment through a calendar interface according to a set of rules assigned to each piece of equipment',
       'author' => 'Thomas R Storey',
@@ -36,7 +36,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       'installs' => array(
         'ProcessLabTool',
         'ProcessLabReservation',
-        'ProcessLabEquipmentRule'
+        'ProcessLabRuleset'
       ),
       'requires' => array('FabLabModuleHelpers')
       );
@@ -46,6 +46,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
   const LabRulesetTemplateName = 'lab_ruleset';
 
   protected $initialized = false;
+  protected $response;
 
   public function __construct() {
     $this->set('initialized', false);
@@ -69,7 +70,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
 		$this->initialized = true;
 
     $this->data = wire('modules')->getModuleConfigData($this);
-    $this->schedulePageID = $this->data['lab_schedule_id'];
+    $this->schedulerPageID = $this->data['lab_schedule_id'];
     $this->helper = $this->wire('modules')->get('FabLabModuleHelpers');
 
     // create $lab_reservations API variable.
@@ -81,7 +82,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $this->labReservationsPageID = $lrp->id;
     }
     $lab_reservations = new LabReservations($labReservationTemplate, $this->labReservationsPageID);
-    $this->wire('lab_charges', $lab_charges);
+    $this->wire('lab_reservations', $lab_reservations);
 
     // create $lab_tools API variable.
     $labToolTemplate = $this->templates->get(self::LabToolTemplateName);
@@ -93,6 +94,17 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     }
     $lab_tools = new LabTools($labToolTemplate, $this->labToolsPageID);
     $this->wire('lab_tools', $lab_tools);
+
+    // create $lab_rulesets API variable.
+    $labRulesetTemplate = $this->templates->get(self::LabRulesetTemplateName);
+    if(!$labRulesetTemplate) return;
+    if(!$this->labRulesetPageID){
+      $selector = 'template=admin, process=ProcessLabRuleset, name=lab_rulesets';
+      $lcip = $this->wire('pages')->get($selector);
+      $this->labRulesetsPageID = $lcip->id;
+    }
+    $lab_rulesets = new LabRulesets($labRulesetTemplate, $this->labRulesetsPageID);
+    $this->wire('lab_rulesets', $lab_rulesets);
     $this->response = array();
   }
 
@@ -101,22 +113,23 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       return $this->handleAjaxRequests();
     }
     if($this->wire('page')->id == $this->schedulerPageID){
-      if($post = $this->wire('input')->post){
-        if($post->reserve){
+      if($this->wire('input')->post){
+        if($this->wire('input')->post('reservation-submit')){
           $this->handleCreateReservation();
         }
-        if($post->cancel){
+        if($this->wire('input')->post('cancellation-submit')){
           $this->handleCancelReservation($this->wire('input')->post);
         }
       }
       // add styles and scripts to scheduler page
-      $liburl = wire('config')->urls->siteModules.'/LabScheduler/lib/';
-      $incurl = wire('config')->urls->siteModules.'/LabScheduler/includes/';
+      $liburl = wire('config')->urls->siteModules.'LabScheduler/lib/';
+      $incurl = wire('config')->urls->siteModules.'LabScheduler/includes/';
       $this->wire('config')->styles->add($liburl."css/fullcalendar.css");
       $this->wire('config')->styles->add($liburl."css/scheduler.css");
       $this->wire('config')->styles->add($incurl."css/labScheduler.css");
 
       $this->wire('config')->scripts->add($liburl."js/moment.min.js");
+      $this->wire('config')->scripts->add($liburl."js/jquery.min.js");
       $this->wire('config')->scripts->add($liburl."js/fullcalendar.js");
       $this->wire('config')->scripts->add($liburl."js/scheduler.js");
       $this->wire('config')->scripts->add($incurl."js/labScheduler.js");
@@ -126,11 +139,15 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
   }
 
   protected function hookRenderSchedule(HookEvent $event){
+    $res = "";
+    foreach ($this->response as $value) {
+      $res.=$value;
+    }
     // render schedule to string.
-    $incurl = wire('config')->urls->siteModules.'/LabScheduler/includes/';
-    $path = $incurl."/labSchedule.inc";
-    $res .= $this->helper->renderFileToString($path);
-    $event->return = str_replace("[schedule]", $res, $event->return);
+    $incurl = wire('config')->paths->siteModules.'/LabScheduler/includes/';
+    $path = $incurl."labScheduler.inc";
+    $res.= $this->helper->renderFileToString($path);
+    $event->return = str_replace("[scheduler]", $res, $event->return);
   }
 
   protected function handleCreateReservation(){
@@ -139,6 +156,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       if($this->validateReservation()){
         $res = new LabReservation();
         $username = $this->wire('user')->name;
+        $toolID = $input->post->text('reservation-tool-id');
         $tool = $input->post->text('reservation-tool');
         $startDate = $input->post->text("reservation-start-date");
         $startTime = $input->post->text('reservation-start-time');
@@ -147,10 +165,10 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
         $res->title = sprintf("%s %s %s %s", $username, $tool, $startDate, $startTime);
         $res->lab_reservation_start = $startDate." ".$startTime;
         $res->lab_reservation_end = $endDate." ".$endTime;
-        $res->lab_reservation_tool = $this->wire('lab_tools')->get('name='.$tool);
+        $res->lab_reservation_tool = $this->wire('lab_tools')->get($toolID)->id;
         $res->lab_reservation_user = $this->wire('user');
         $res->save();
-        $this->response[] = "<p class='message'>Reservation successful!</p>"
+        $this->response[] = "<p class='message'>Reservation successful!</p>";
       } else {
         $invalidMsg = "<p class='error'>Invalid reservation. Please see the";
         $invalidMsg .= " messages below and adjust your reservation as";
@@ -162,7 +180,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
 
   protected function handleCancelReservation(){
     $input = $this->wire('input');
-    if($input->post('reservation-cancel-submit')){
+    if($input->post('cancellation-submit')){
       if($this->validateCancellation()){
         $resID = $input->post->text('reservation-cancel-id');
         $res = $this->wire('lab_reservations')->get($resID);
@@ -179,96 +197,242 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     if(wire('config')->ajax && wire('input')->get('reservations')){
       $this->addHookBefore('TemplateFile::render', $this, 'hookAjaxGetReservations');
     }
-    if(wire('config')->ajax && wire('input')->get->('tools')){
+    if(wire('config')->ajax && wire('input')->get('tools')){
       $this->addHookBefore('TemplateFile::render', $this, 'hookAjaxGetTools');
     }
   }
 
-  protected function hookGetEvents(HookEvent $event){
+  protected function hookAjaxGetReservations(HookEvent $event){
     $input = $this->wire('input');
     $startTimestamp = strtotime($input->get->text('start'));
     $endTimestamp = strtotime($input->get->text('end'));
-    $json = array(
-      'events' => array(),
-      'resources' => array()
-    );
+    $json = array();
+    // get reservations for date range
     $selector = "lab_reservation_start>=$startTimestamp, ";
     $selector.= "lab_reservation_end<=$endTimestamp, ";
     $selector.= "check_access=0, include=all";
     $reservations = $this->wire('lab_reservations')->find($selector);
     foreach($reservations as $res){
-      $json['events'][] = array(
+      $json[] = array(
         'title' => $res->title,
         'start' => $res->lab_reservation_start,
         'end' => $res->lab_reservation_end,
-        'resourceId' => $res->lab_reservation->tool->id,
+        'user' => $res->lab_reservation_user->name,
+        'resourceId' => $res->lab_reservation_tool->id,
         'id' => $res->id
       );
     }
+    $event->replace = true;
+    $event->return = json_encode($json);
+  }
 
-    
+  protected function hookAjaxGetTools(HookEvent $event){
+    $input = $this->wire('input');
+    $json = array();
+    // get tools
+    $selector = "check_access=0, include=all";
+    $tools = $this->wire('lab_tools')->find($selector);
+    foreach($tools as $t){
+      if($t->lab_tool_available){
+        $toolColor = $t->lab_tool_color;
+      } else {
+        $toolColor = "#7f7f7f";
+      }
+      $json[] = array(
+        'title' => $t->title,
+        'eventColor' => $toolColor,
+        'status' => $t->lab_tool_status,
+        'id' => $t->id
+      );
+      $event->replace = true;
+      $event->return = json_encode($json);
+    }
 
   }
 
-  protected function hookGetConfig(HookEvent $event){
+  protected function validateReservation(){
+    if($this->wire('user')->isLoggedIn()){
+      $valid = array();
+      $input = $this->wire('input');
+      $dateStartStr = $input->post('reservation-start-date');
+      $timeStartStr = $input->post('reservation-start-time');
+      $dateEndStr = $input->post('reservation-end-date');
+      $timeEndStr = $input->post('reservation-end-time');
+      $start = new DateTime($dateStartStr." ".$timeStartStr);
+      $end = new DateTime($dateEndStr." ".$timeEndStr);
+      $user = $this->wire('user');
+      $tool = $this->wire('lab_tools')->get($input->post('reservation-tool-id'));
+      $ruleset = $this->wire('lab_rulesets')->get($tool->lab_tool_ruleset->id);
+      $valid[] = $this->evaluateRuleset($start, $end, $user, $tool, $ruleset);
+      $valid[] = $this->validateOverlap($start, $end, $tool);
+      $valid[] = $this->validateUserUsagePerWeek($start, $end, $user);
+
+      return !in_array(false, $valid);
+    } else {
+      $this->response[] = "<p class='error'>You must be logged in to make a reservation!</p>";
+      return false;
+    }
+
 
   }
 
-  protected function renderReservationsJSON($start, $end){
-
-  }
-
-  protected function renderConfigJSON(){
-
-  }
-
-  protected function validateReservation($postdata){
-    $dateStartStr = $input->post('reservation-start-date');
-    $timeStartStr = $input->post('reservation-start-time');
-    $dateTimeStart = new DateTime($dateStartStr." ".$timeStartStr);
-    $dateEndStr = $input->post('reservation-end-date');
-    $timeEndStr = $input->post('reservation-end-time');
-    $dateTimeEnd = new DateTime($dateEndStr." ".$timeEndStr);
-  }
-
-  protected function validateCancellation($postdata){
-
+  protected function validateCancellation(){
+    $input = $this->wire('input');
+    $user = $this->wire('user');
+    $reservation = $this->wire('lab_reservations')->get($input->post('reservation-cancel-id'));
+    $tool = $this->wire('lab_tools')->get($reservation->lab_reservation_tool->id);
+    // is the user cancelling their own reservation?
+    $reservationUser = $this->wire('users')->get($reservation->lab_reservation_user->id);
+    if(! $user->id == $reservationUser->id){
+      $this->response[] = '<p class="error">You can not cancel other users\' reservations!</p>';
+      return false;
+    }
+    // is the user cancelling before the buffer time?
+    // now < start - buffer
+    $start = new DateTime($reservation->lab_reservation_start);
+    $buffer = $this->wire('lab_rulesets')->get($tool->lab_tool_ruleset->id)->lab_ruleset_cancellation_buffer_hours;
+    $bufferSec = $buffer*60*60;
+    // var_dump(time(), $start, $bufferSec);
+    if(time() >= $start->getTimestamp() - $bufferSec){
+      $this->response[] = "<p class='error'>You can not cancel a reservation less than {$buffer} hours before it begins!</p>";
+      return false;
+    }
+    return true;
   }
 
   protected function evaluateRuleset($start, $end, $user, $tool, $ruleset){
-
+    $valid = array();
+    $applies = false;
+    foreach ($user->roles as $role) {
+      foreach ($ruleset->lab_ruleset_roles as $rulesetRole){
+        if($role->id == $rulesetRole->id){
+          $applies = true;
+          break;
+        }
+      }
+    }
+    if($applies){
+      $valid[] = $this->validateBuffer($start, $ruleset);
+      $valid[] = $this->validateDay($start, $end, $ruleset);
+      $valid[] = $this->validateHour($start, $end, $ruleset);
+      $valid[] = $this->validateToolUsagePerWeek($start, $end, $user, $tool, $ruleset);
+      $valid[] = $this->validateLength($start, $end, $ruleset);
+      return !in_array(false, $valid);
+    } else {
+      return true;
+    }
   }
 
-  protected function isValidDay($start, $end, $rule){
-
+  protected function validateDay($start, $end, $ruleset){
+    // does the start/end range include any time from a forbidden day?
+    $reservableDays = explode(",", $ruleset->lab_ruleset_reservable_days);
+    if(!count($reservableDays)){
+      return true;
+    }
+    $startDay = $start->format('N');
+    $endDay = $end->format('N');
+    if(!in_array($startDay, $reservableDays)
+    || !in_array($endDay, $reservableDays)) {
+      $this->response[] = "<p class='error'>You can't reserve that tool on that day of the week.</p>";
+      return false;
+    } else {
+      return true;
+    }
   }
 
-  protected function isValidHour($start, $end, $rule){
-
+  protected function validateHour($start, $end, $ruleset){
+    $reservableHours = explode(",", $ruleset->lab_ruleset_reservable_hours);
+    if(!count($reservableHours)){
+      return true;
+    }
+    $startHour = $start->format('G');
+    $endHour = $end->format('G');
+    if(!in_array($startHour, $reservableHours)
+    || !in_array($endHour, $reservableHours)) {
+      $this->response[] = "<p class='error'>You can't reserve that tool during that hour of the day.</p>";
+      return false;
+    } else {
+      return true;
+    }
   }
 
-  protected function isValidToolUsagePerWeek($start, $end, $tool, $rule){
-
+  protected function validateToolUsagePerWeek($start, $end, $user, $tool, $ruleset){
+    if($ruleset->lab_ruleset_hours_per_week <= 0){
+      return true;
+    }
+    $duration = $end->getTimestamp() - $start->getTimestamp();
+    $weekStart = strtotime("Last Sunday", time());
+    $weekEnd = strtotime("Next Sunday", time());
+    $selector = "lab_reservation_tool={$tool->id}, lab_reservation_start>={$weekStart}, ";
+    $selector.= "lab_reservation_end<={$weekEnd}, check_access=0, include=all";
+    $reservations = $this->wire('lab_reservations')->find($selector);
+    foreach ($reservations as $r) {
+      $duration += $r->lab_reservation_end - $r->lab_reservation_start;
+    }
+    if($duration >= $ruleset->lab_ruleset_hours_per_week*60*60){
+      $this->response[] = "<p class='error'>That tool can only be reserved for {$ruleset->lab_ruleset_hours_per_week} hours per week.</p>";
+      return false;
+    } else {
+      return true;
+    }
   }
 
-  protected function isValidCancelUser($start, $end, $rule){
-
+  protected function validateOverlap($start, $end, $tool){
+    $selector = "lab_reservation_tool={$tool->id}, check_access=0, include=all";
+    $reservations = $this->wire('lab_reservations')->find($selector);
+    $startTimestamp = $start->getTimestamp();
+    $endTimestamp = $end->getTimestamp();
+    foreach ($reservations as $r) {
+      $rStart = $r->lab_reservation_start;
+      $rEnd = $r->lab_reservation_end;
+      if(($startTimestamp < $rStart && $endTimestamp > $rStart)
+      || ($startTimestamp < $rEnd)){
+        $this->response[] = "<p class='error'>Reservations for the same tool can not overlap!</p>";
+        return false;
+      }
+    }
+    return true;
   }
 
-  protected function isValidOverlap($start, $end, $rule){
-
+  protected function validateUserUsagePerWeek($start, $end, $user){
+    $userTimePerWeek = $this->data['max_hours_per_week']*60*60;
+    $weekStart = strtotime("Last Sunday", time());
+    $weekEnd = strtotime("Next Sunday", time());
+    $selector = "lab_reservation_user={$user->id}, lab_reservation_start>={$weekStart}, ";
+    $selector.= "lab_reservation_end<={$weekEnd}, check_access=0, include=all";
+    $reservations = $this->wire('lab_reservations')->find($selector);
+    $accumulated = $end->getTimestamp() - $start->getTimestamp();
+    foreach ($reservations as $r) {
+      $accumulated += ($r->lab_reservation_end - $r->lab_reservation_start);
+    }
+    if($accumulated >= $userTimePerWeek){
+      $this->response[] = "<p class='error'>That reservation would exceed your maximum usage per week.</p>";
+      return false;
+    } else {
+      return true;
+    }
   }
 
-  protected function isValidTotalUsagePerWeek($start, $end, $rule){
-
+  protected function validateLength($start, $end, $ruleset){
+    $length = $end->getTimestamp() - $start->getTimestamp();
+    $maxLength = $ruleset->lab_ruleset_maximum_reservation_hours;
+    $minLength = $ruleset->lab_ruleset_minimum_reservation_hours;
+    if($minLength*60*60 <= $length && $length <= $maxLength*60*60){
+      return true;
+    } else {
+      $this->response[] = "<p class='error'>Reservations for that tool must be between {$minLength} and {$maxLength} hours in length.</p>";
+      return false;
+    }
   }
 
-  protected function isValidLength($start, $end, $rule){
-
-  }
-
-  protected function isValidBuffer($start, $end, $rule){
-
+  protected function validateBuffer($start, $ruleset){
+    $buffer = $ruleset->lab_ruleset_reservation_buffer_hours;
+    if(time() + $buffer*60*60 > $start->getTimestamp()){
+      $this->response[] = "<p class='error'>Reservations for that tool must be made at least {$buffer} hours in advance.</p>";
+      return false;
+    } else {
+      return true;
+    }
   }
 
   protected function installer($install = true) {

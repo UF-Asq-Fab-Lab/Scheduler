@@ -42,6 +42,8 @@ class ProcessLabTool extends ProcessPageType {
 
 	public function init() {
 		parent::init();
+		$this->addHookAfter('ProcessPageAdd::buildForm', $this, 'hookAfterPageAddBuildForm');
+
 	}
 
 	protected function useLister() {
@@ -51,6 +53,29 @@ class ProcessLabTool extends ProcessPageType {
 	public function ___executeEdit() {
 		$out = parent::___executeEdit();
 		return $out;
+	}
+
+	protected function hookAfterPageAddBuildForm(HookEvent $event){
+		$form = $event->return;
+		$formSave = $form->children('name=submit_save')->first();
+		// ruleset
+		$field = $this->wire('fields')->get('lab_tool_ruleset')->getInputfield(new NullPage());
+		$form->insertBefore($field, $formSave);
+		// color
+		$field = $this->wire('fields')->get('lab_tool_color')->getInputfield(new NullPage());
+		$form->insertBefore($field, $formSave);
+		// status
+		$field = $this->wire('fields')->get('lab_tool_status')->getInputfield(new NullPage());
+		$field->value = "OK";
+		$form->insertBefore($field, $formSave);
+		// available
+		$field = $this->wire('fields')->get('lab_tool_available')->getInputfield(new NullPage());
+		$field->value = 1;
+		$field->attr("checked", true);
+		$form->insertBefore($field, $formSave);
+
+
+		$event->return = $form;
 	}
 }
 ?>
