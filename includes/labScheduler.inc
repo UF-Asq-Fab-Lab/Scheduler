@@ -60,11 +60,11 @@ $data = wire('modules')->getModuleConfigData('LabScheduler');
 <div id="cancellation-form-container">
 <form id="cancellation-form" method="post" action="./">
   <div class="row">
-    <div class="three columns">
+    <div class="six columns">
       <input id="reservation-cancel-id" type="hidden" name="reservation-cancel-id" value="">
       <input id="cancellation-submit" name="cancellation-submit" class="button-primary" type="submit" value="Cancel Reservation">
     </div>
-    <div id="reservation-info" class="nine columns">
+    <div id="reservation-info" class="six columns">
       <p><strong id="reservation-info-title"></strong></p>
       <p><strong>Day: </strong><span id="reservation-info-date"></span></p>
       <p><strong>Time: </strong><span id="reservation-info-time"></span></p>
