@@ -126,15 +126,18 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $incurl = wire('config')->urls->siteModules.'LabScheduler/includes/';
       $this->wire('config')->styles->add($liburl."css/fullcalendar.css");
       $this->wire('config')->styles->add($liburl."css/scheduler.css");
-      $this->wire('config')->styles->add($incurl."css/labScheduler.css");
+      $this->wire('config')->styles->add($incurl."css/LabScheduler.css");
 
       $this->wire('config')->scripts->add($liburl."js/moment.min.js");
       $this->wire('config')->scripts->add($liburl."js/jquery.min.js");
       $this->wire('config')->scripts->add($liburl."js/fullcalendar.js");
       $this->wire('config')->scripts->add($liburl."js/scheduler.js");
-      $this->wire('config')->scripts->add($incurl."js/labScheduler.js");
+      $this->wire('config')->scripts->add($incurl."js/LabScheduler.js");
       // hook to template render
       $this->addHookAfter('TemplateFile::render', $this, 'hookRenderSchedule');
+    }
+    if(strpos($this->wire('page')->url, wire('config')->urls->admin) !== 0) {
+      $this->addHookAfter('TemplateFile::render', $this, 'hookRenderNav');
     }
   }
 
@@ -145,9 +148,17 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     }
     // render schedule to string.
     $incurl = wire('config')->paths->siteModules.'/LabScheduler/includes/';
-    $path = $incurl."labScheduler.inc";
+    $path = $incurl."LabScheduler.inc";
     $res.= $this->helper->renderFileToString($path);
     $event->return = str_replace("[scheduler]", $res, $event->return);
+  }
+
+  protected function hookRenderNav(HookEvent $event){
+    // render schedule to string.
+    $incurl = wire('config')->paths->siteModules.'/LabScheduler/includes/';
+    $path = $incurl."LabSchedulerNav.inc";
+    $res = $this->helper->renderFileToString($path);
+    $event->return = str_replace("[scheduler-nav]", $res, $event->return);
   }
 
   protected function handleCreateReservation(){
@@ -242,7 +253,8 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
         'title' => $t->title,
         'eventColor' => $toolColor,
         'status' => $t->lab_tool_status,
-        'id' => $t->id
+        'id' => $t->id,
+        'available' => $t->lab_tool_available
       );
       $event->replace = true;
       $event->return = json_encode($json);

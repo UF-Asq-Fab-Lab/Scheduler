@@ -54,9 +54,20 @@ $(document).ready(function(){
         'tools' : 1
       }
     },
-    aspectRatio: 2,
+    height:300,
+    loading: function loading (isLoading, view){
+      var res = $('#calendar').fullCalendar('getResources');
+      if(!isLoading && res.length){
+        var height = res.length*100 > 300 ? res.length*100 : 300;
+        $('#calendar').fullCalendar('option', 'height', height);
+      }
+    },
     select: function select (start, end, event, view, tool){
       $('#calendar').fullCalendar('removeEvents', 'new-reservation');
+      if(!tool.available){
+        reserveFormContainer.toggle(false);
+        return;
+      }
       var title = user+" "+tool.title+" "+start.format(format);
       var data = {
         title: title,
@@ -82,14 +93,13 @@ $(document).ready(function(){
       if(reservation.user === user){
         $("#cancellation-submit").removeAttr("disabled");
         $("#reservation-cancel-id").val(reservation.id);
-        resDateInfo.html(reservation.start.format(dateFormat));
-        resTimeInfo.html(reservation.start.format(timeFormat)+" - "+reservation.end.format(timeFormat));
-        resToolInfo.html($('#calendar').fullCalendar('getResourceById', reservation.resourceId).title);
-        resUserInfo.html(reservation.user);
       } else {
         $("#cancellation-submit").attr("disabled", true);
-        // $("#cancellation-submit").attr("disabled", true);
       }
+      resDateInfo.html(reservation.start.format(dateFormat));
+      resTimeInfo.html(reservation.start.format(timeFormat)+" - "+reservation.end.format(timeFormat));
+      resToolInfo.html($('#calendar').fullCalendar('getResourceById', reservation.resourceId).title);
+      resUserInfo.html(reservation.user);
     }
   });
 });
