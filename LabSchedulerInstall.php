@@ -36,7 +36,13 @@
       $schedulePage->of(false);
       $schedulePage->body = "[scheduler]";
       $schedulePage->save();
+      $schedulePage->of(true);
 
+      // create scheduler role and permission
+      $schedulerPermission = $this->wire('permissions')->add('scheduler-edit');
+      $schedulerRole = $this->wire('roles')->add('scheduler-admin');
+      $schedulerRole->addPermission($schedulerPermission);
+      $schedulerRole->save();
 
       $templateOptions = array('noChildren' => 1, 'noSettings' => 1);
       // create LabReservation page template
@@ -116,6 +122,7 @@
       'tags'=>'Scheduler',
       'description'=>'Comma separated list of hours of the day during which the tool can be reserved. Leave this field blank to disable this rule.'
     );
+    $text_opt = array( 'tags'=>'Scheduler');
     $lrsf = array(
       'title'=> array('type'=>'FieldtypeTitle', 'options'=>array()),
       'lab_ruleset_roles' => array('type'=>'FieldtypePage', 'options'=>$roles_opt),

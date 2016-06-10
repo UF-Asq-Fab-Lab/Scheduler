@@ -149,7 +149,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     // render schedule to string.
     $incurl = wire('config')->paths->siteModules.'/LabScheduler/includes/';
     $path = $incurl."LabScheduler.inc";
-    $res.= $this->helper->renderFileToString($path);
+    $res.= $this->helper->renderFileToString($path, null);
     $event->return = str_replace("[scheduler]", $res, $event->return);
   }
 
@@ -157,7 +157,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     // render schedule to string.
     $incurl = wire('config')->paths->siteModules.'/LabScheduler/includes/';
     $path = $incurl."LabSchedulerNav.inc";
-    $res = $this->helper->renderFileToString($path);
+    $res = $this->helper->renderFileToString($path, null);
     $event->return = str_replace("[scheduler-nav]", $res, $event->return);
   }
 

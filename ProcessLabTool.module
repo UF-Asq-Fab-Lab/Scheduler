@@ -23,6 +23,7 @@ class ProcessLabTool extends ProcessPageType {
 			'permission' => 'user-admin',
 			'icon'       => 'paint-brush',
       'requires'   => array('LabScheduler'),
+			'permission' => 'scheduler-edit',
 			'useNavJSON' => true,
 		);
 	}

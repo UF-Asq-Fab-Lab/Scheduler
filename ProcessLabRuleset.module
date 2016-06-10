@@ -23,6 +23,7 @@ class ProcessLabRuleset extends ProcessPageType {
 			'permission' => 'user-admin',
 			'icon'       => 'gavel',
       'requires'   => array('LabScheduler'),
+			'permission' => 'scheduler-edit',
 			'useNavJSON' => true,
 		);
 	}

@@ -23,6 +23,7 @@ class ProcessLabReservation extends ProcessPageType {
 			'permission' => 'user-admin',
 			'icon'       => 'calendar',
       'requires'   => array('LabScheduler'),
+			'permission' => 'scheduler-edit',
 			'useNavJSON' => true,
 		);
 	}
