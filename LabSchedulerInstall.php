@@ -44,7 +44,7 @@
       $schedulerRole->addPermission($schedulerPermission);
       $schedulerRole->save();
 
-      $templateOptions = array('noChildren' => 1, 'noSettings' => 1);
+      $templateOptions = array('noChildren' => 1, 'noSettings' => 1, 'noUnpublished' => 1);
       // create LabReservation page template
       $tool_opt = array(
         'tags'=>'Scheduler',
@@ -127,12 +127,14 @@
       'title'=> array('type'=>'FieldtypeTitle', 'options'=>array()),
       'lab_ruleset_roles' => array('type'=>'FieldtypePage', 'options'=>$roles_opt),
       'lab_ruleset_hours_per_week' => array('type'=>'FieldtypeInteger', 'options'=>$int_opt),
+      'lab_ruleset_hours_per_day' => array('type'=>'FieldtypeInteger', 'options'=>$int_opt),
       'lab_ruleset_reservation_buffer_hours' => array('type'=>'FieldtypeInteger', 'options'=>$int_opt),
       'lab_ruleset_cancellation_buffer_hours' => array('type'=>'FieldtypeInteger', 'options'=>$int_opt),
       'lab_ruleset_minimum_reservation_hours' => array('type'=>'FieldtypeInteger', 'options'=>$int_opt),
       'lab_ruleset_maximum_reservation_hours' => array('type'=>'FieldtypeInteger', 'options'=>$int_opt),
       'lab_ruleset_reservable_days' => array('type'=>'FieldtypeText', 'options'=>$text_opt),
       'lab_ruleset_reservable_hours' => array('type'=>'FieldtypeText', 'options'=>$text_opt),
+      'lab_ruleset_allow_simultaneous_reservations' => array('type'=>'FieldtypeCheckbox', 'options'=>$text_opt)
     );
     $labRulesetTemplate = $helper->getTemplate(
     LabScheduler::LabRulesetTemplateName, $lrsf, 'Scheduler', $templateOptions);

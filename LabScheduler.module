@@ -328,6 +328,8 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $valid[] = $this->validateDay($start, $end, $ruleset);
       $valid[] = $this->validateHour($start, $end, $ruleset);
       $valid[] = $this->validateToolUsagePerWeek($start, $end, $user, $tool, $ruleset);
+      $valid[] = $this->validateUserUsagePerDay($start, $end, $user, $tool, $ruleset);
+      $valid[] = $this->validateSimultaneousUsage($start, $end, $user, $tool, $ruleset);
       $valid[] = $this->validateLength($start, $end, $ruleset);
       return !in_array(false, $valid);
     } else {
@@ -419,6 +421,38 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     }
     if($accumulated >= $userTimePerWeek){
       $this->response[] = "<p class='error'>That reservation would exceed your maximum usage per week.</p>";
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  protected function validateUserUsagePerDay($start, $end, $user, $tool, $ruleset){
+    $userTimePerWeek = $ruleset->lab_ruleset_hours_per_day*60*60;
+    $dayStart = strtotime("today", time());
+    $dayEnd = strtotime("tomorrow", time());
+    $selector = "lab_reservation_user={$user->id}, lab_reservation_start>={$dayStart}, ";
+    $selector.= "lab_reservation_end<={$dayEnd}, lab_reservation_tool={$tool->id}, check_access=0, include=all";
+    $reservations = $this->wire('lab_reservations')->find($selector);
+    $accumulated = $end->getTimestamp() - $start->getTimestamp();
+    foreach ($reservations as $r) {
+      $accumulated += ($r->lab_reservation_end - $r->lab_reservation_start);
+    }
+    if($accumulated >= $userTimePerWeek){
+      $this->response[] = "<p class='error'>That reservation would exceed your maximum usage per day.</p>";
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  protected function validateSimultaneousUsage($start, $end, $user, $tool, $ruleset) {
+    if($ruleset->lab_ruleset_allow_simultaneous_reservations){ return true; }
+    // find a reservation that happens at the same time with the same user on any tool.
+    $selector = "lab_reservation_user={$user->id}, lab_reservation_start>={$start}, ";
+    $selector.= "lab_reservation_end<={$end}, check_access=0, include=all";
+    $reservations = $this->wire('lab_reservations')->find($selector);
+    if(count($reservations)){
       return false;
     } else {
       return true;
