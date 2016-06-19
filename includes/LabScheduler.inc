@@ -1,6 +1,14 @@
 <?php
 // check permission to view/edit the schedule
 $data = wire('modules')->getModuleConfigData('LabScheduler');
+$user = $this->wire('user');
+$allowed = ['laser-user', 'admin', 'superuser'];
+$isAllowed = false;
+foreach ($allowed as $role) {
+  $isAllowed = $user->hasRole($role);
+  if($isAllowed){break;}
+}
+if($user->isLoggedIn() && $isAllowed){
  ?>
 <div class="row">
   <div id='calendar'></div>
@@ -74,3 +82,8 @@ $data = wire('modules')->getModuleConfigData('LabScheduler');
   </div>
 </form>
 </div>
+<?php } else { //end if isLoggedIn ?>
+<div class="row">
+<p>You do not have the appropriate permissions to view this page.</p>
+</div>
+<?php } //end else?>

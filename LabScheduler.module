@@ -81,7 +81,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $lrp = $this->wire('pages')->get($selector);
       $this->labReservationsPageID = $lrp->id;
     }
-    $lab_reservations = new LabReservations($labReservationTemplate, $this->labReservationsPageID);
+    $lab_reservations = new LabReservations($this->wire, $labReservationTemplate, $this->labReservationsPageID);
     $this->wire('lab_reservations', $lab_reservations);
 
     // create $lab_tools API variable.
@@ -92,7 +92,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $lcip = $this->wire('pages')->get($selector);
       $this->labToolsPageID = $lcip->id;
     }
-    $lab_tools = new LabTools($labToolTemplate, $this->labToolsPageID);
+    $lab_tools = new LabTools($this->wire, $labToolTemplate, $this->labToolsPageID);
     $this->wire('lab_tools', $lab_tools);
 
     // create $lab_rulesets API variable.
@@ -103,7 +103,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $lcip = $this->wire('pages')->get($selector);
       $this->labRulesetsPageID = $lcip->id;
     }
-    $lab_rulesets = new LabRulesets($labRulesetTemplate, $this->labRulesetsPageID);
+    $lab_rulesets = new LabRulesets($this->wire, $labRulesetTemplate, $this->labRulesetsPageID);
     $this->wire('lab_rulesets', $lab_rulesets);
     $this->response = array();
   }
@@ -276,8 +276,6 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $tool = $this->wire('lab_tools')->get($input->post('reservation-tool-id'));
       $ruleset = $this->wire('lab_rulesets')->get($tool->lab_tool_ruleset->id);
       $valid[] = $this->evaluateRuleset($start, $end, $user, $tool, $ruleset);
-      $valid[] = $this->validateOverlap($start, $end, $tool);
-      $valid[] = $this->validateUserUsagePerWeek($start, $end, $user);
 
       return !in_array(false, $valid);
     } else {
@@ -293,23 +291,40 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     $user = $this->wire('user');
     $reservation = $this->wire('lab_reservations')->get($input->post('reservation-cancel-id'));
     $tool = $this->wire('lab_tools')->get($reservation->lab_reservation_tool->id);
+    $ruleset = $tool->get('lab_tool_ruleset');
     // is the user cancelling their own reservation?
     $reservationUser = $this->wire('users')->get($reservation->lab_reservation_user->id);
-    if(! $user->id == $reservationUser->id){
-      $this->response[] = '<p class="error">You can not cancel other users\' reservations!</p>';
-      return false;
+    $applies = false;
+    foreach ($user->roles as $role) {
+      foreach ($ruleset->lab_ruleset_roles as $rulesetRole){
+        if($role == $rulesetRole){
+          $applies = true;
+          break;
+        }
+      }
     }
-    // is the user cancelling before the buffer time?
-    // now < start - buffer
-    $start = new DateTime($reservation->lab_reservation_start);
-    $buffer = $this->wire('lab_rulesets')->get($tool->lab_tool_ruleset->id)->lab_ruleset_cancellation_buffer_hours;
-    $bufferSec = $buffer*60*60;
-    // var_dump(time(), $start, $bufferSec);
-    if(time() >= $start->getTimestamp() - $bufferSec){
-      $this->response[] = "<p class='error'>You can not cancel a reservation less than {$buffer} hours before it begins!</p>";
-      return false;
+    if($applies){
+
+      if(! $user->id == $reservationUser->id){
+        $this->response[] = '<p class="error">You can not cancel other users\' reservations!</p>';
+        return false;
+      }
+      // is the user cancelling before the buffer time?
+      // now < start - buffer
+      $start = new DateTime($reservation->lab_reservation_start);
+      $buffer = $this->wire('lab_rulesets')->get($tool->lab_tool_ruleset->id)->lab_ruleset_cancellation_buffer_hours;
+      $bufferSec = $buffer*60*60;
+      // var_dump(time(), $start, $bufferSec);
+      if(time() >= $start->getTimestamp() - $bufferSec){
+        $this->response[] = "<p class='error'>You can not cancel a reservation less than {$buffer} hours before it begins!</p>";
+        return false;
+      }
+      return true;
+
+    } else {
+      return true;
     }
-    return true;
+
   }
 
   protected function evaluateRuleset($start, $end, $user, $tool, $ruleset){
@@ -317,7 +332,7 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
     $applies = false;
     foreach ($user->roles as $role) {
       foreach ($ruleset->lab_ruleset_roles as $rulesetRole){
-        if($role->id == $rulesetRole->id){
+        if($role == $rulesetRole){
           $applies = true;
           break;
         }
@@ -331,6 +346,8 @@ class LabScheduler extends WireData implements Module, ConfigurableModule {
       $valid[] = $this->validateUserUsagePerDay($start, $end, $user, $tool, $ruleset);
       $valid[] = $this->validateSimultaneousUsage($start, $end, $user, $tool, $ruleset);
       $valid[] = $this->validateLength($start, $end, $ruleset);
+      $valid[] = $this->validateOverlap($start, $end, $tool);
+      $valid[] = $this->validateUserUsagePerWeek($start, $end, $user);
       return !in_array(false, $valid);
     } else {
       return true;
